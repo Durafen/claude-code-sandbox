@@ -30,6 +30,8 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     lsb-release \
+    nodejs \
+    npm \
     # Dependencies for asdf and language builds \
     coreutils \
     autoconf \
@@ -70,6 +72,12 @@ RUN gosu 1000:1000 sh -c "git clone https://github.com/asdf-vm/asdf.git ~/.asdf 
 RUN gosu 1000:1000 sh -c "echo 'source \$HOME/.asdf/asdf.sh' >> ~/.bashrc && \
     echo 'source \$HOME/.asdf/completions/asdf.bash' >> ~/.bashrc"
 
+# Pre-install Claude Code and opencode as node user with npm prefix
+RUN gosu 1000:1000 sh -c "npm config set prefix ~/.npm-global && npm install -g @anthropic-ai/claude-code opencode-ai"
+
+# Add npm-global to PATH
+RUN gosu 1000:1000 sh -c "echo 'export PATH=\"\$HOME/.npm-global/bin:\$PATH\"' >> ~/.bashrc"
+
 # Note: Base image only contains asdf setup, tools are installed in workspace stage
 
 # Install uv for the node user
@@ -91,12 +99,11 @@ RUN echo '#!/bin/bash' > /usr/local/bin/claude-wrapper && \
     echo '    exit 1' >> /usr/local/bin/claude-wrapper && \
     echo 'fi' >> /usr/local/bin/claude-wrapper && \
     echo '' >> /usr/local/bin/claude-wrapper && \
-    echo '# Install claude-code if not already installed for current Node.js version' >> /usr/local/bin/claude-wrapper && \
-    echo 'CLAUDE_PATH=$(npm root -g 2>/dev/null)/@anthropic-ai/claude-code/cli.js' >> /usr/local/bin/claude-wrapper && \
+    echo '# Find claude-code installation' >> /usr/local/bin/claude-wrapper && \
+    echo 'CLAUDE_PATH="$HOME/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js"' >> /usr/local/bin/claude-wrapper && \
     echo 'if [[ ! -f "$CLAUDE_PATH" ]]; then' >> /usr/local/bin/claude-wrapper && \
-    echo '    echo "Installing Claude Code for current Node.js version..."' >> /usr/local/bin/claude-wrapper && \
-    echo '    npm install -g @anthropic-ai/claude-code' >> /usr/local/bin/claude-wrapper && \
-    echo '    asdf reshim nodejs' >> /usr/local/bin/claude-wrapper && \
+    echo '    echo "Error: Claude Code not found at $CLAUDE_PATH"' >> /usr/local/bin/claude-wrapper && \
+    echo '    exit 1' >> /usr/local/bin/claude-wrapper && \
     echo 'fi' >> /usr/local/bin/claude-wrapper && \
     echo '' >> /usr/local/bin/claude-wrapper && \
     echo 'exec node --no-warnings --enable-source-maps "$CLAUDE_PATH" "$@"' >> /usr/local/bin/claude-wrapper && \

@@ -5,7 +5,7 @@
 
 # Function to generate random suffix
 generate_random_suffix() {
-    head /dev/urandom | tr -dc a-z0-9 | head -c 8
+    python3 -c "import random, string; print(''.join(random.choices(string.ascii_lowercase + string.digits, k=8)))"
 }
 
 # Define base image name (shared across all workspaces)
@@ -452,11 +452,36 @@ fi
 
 # Check for Claude configuration directories
 CLAUDE_CONFIG=""
+CREDS_TEMP_FILE=""
+
+# Cleanup function for temp files
+cleanup() {
+    if [ -n "$CREDS_TEMP_FILE" ] && [ -f "$CREDS_TEMP_FILE" ]; then
+        rm -f "$CREDS_TEMP_FILE"
+    fi
+}
+trap cleanup EXIT
+
+# Extract Claude OAuth credentials from macOS Keychain and write to temp file
+if command -v security >/dev/null 2>&1; then
+    CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+    if [ -n "$CREDS" ]; then
+        CREDS_TEMP_FILE=$(mktemp)
+        echo "$CREDS" > "$CREDS_TEMP_FILE"
+        chmod 600 "$CREDS_TEMP_FILE"
+        echo "Using Claude credentials from macOS Keychain"
+    fi
+fi
 
 # Check for .claude directory
 if [ -d "$HOME/.claude" ]; then
     CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.claude:/home/node/.claude"
     echo "Mounting Claude config from $HOME/.claude"
+fi
+
+# Mount credentials file (after .claude dir to override)
+if [ -n "$CREDS_TEMP_FILE" ] && [ -f "$CREDS_TEMP_FILE" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $CREDS_TEMP_FILE:/home/node/.claude/.credentials.json:ro"
 fi
 
 # Check for .config/claude directory
@@ -546,6 +571,18 @@ if [ -f "$HOME/.claude.json" ]; then
     echo "Mounting Claude config from $HOME/.claude.json"
 fi
 
+# Check for opencode config
+if [ -d "$HOME/.config/opencode" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.config/opencode:/home/node/.config/opencode"
+    echo "Mounting opencode config from $HOME/.config/opencode"
+fi
+
+# Check for opencode data (auth, storage, etc.)
+if [ -d "$HOME/.local/share/opencode" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.local/share/opencode:/home/node/.local/share/opencode"
+    echo "Mounting opencode data from $HOME/.local/share/opencode"
+fi
+
 # Check for basic-memory directory (basic-memory MCP server)
 if [ -d "$HOME/basic-memory" ]; then
     CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/basic-memory:/home/node/basic-memory"
@@ -577,9 +614,10 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -v "$(pwd):/workspace" \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
+             \
             -e TERM="$TERM" \
             --init \
-            $IMAGE_NAME \
+            "$IMAGE_NAME" \
             bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; exec bash"
     elif [ "$NON_INTERACTIVE" = true ]; then
         # Run non-interactive command with asdf support
@@ -588,9 +626,10 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -v "$(pwd):/workspace" \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
+             \
             --init \
-            $IMAGE_NAME \
-            bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; $*"
+            "$IMAGE_NAME" \
+            bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; $*"
     else
         # Run the container with current directory mounted as workspace
         docker run -it --rm \
@@ -598,9 +637,10 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -v "$(pwd):/workspace" \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
+             \
             -e TERM="$TERM" \
             --init \
-            $IMAGE_NAME \
+            "$IMAGE_NAME" \
             bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; if ! command -v node >/dev/null 2>&1; then echo 'No Node.js found, installing LTS...'; asdf plugin add nodejs 2>/dev/null || true; asdf install nodejs lts; asdf global nodejs lts; fi; claude-wrapper --dangerously-skip-permissions $*"
     fi
 else
