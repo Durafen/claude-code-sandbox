@@ -17,7 +17,6 @@ if ! command -v docker >/dev/null 2>&1 || ! docker ps >/dev/null 2>&1; then
 #!/bin/bash
 # Fake docker that just logs calls
 echo "Fake docker called with: $*"
-# If it's a 'docker run' command, we might want to simulate success
 case "$1" in
     run|build|rmi|images)
         if [[ "$*" == *"images -q"* ]]; then
@@ -97,76 +96,84 @@ echo "Starting tests..."
 # Test 1: Shell mode with worktree from existing branch
 echo "Running Test 1..."
 ./claude-code-sandbox --worktree-branch=feat/test -s -n 'echo' >/tmp/test1.out 2>&1
-if [ -d ".worktrees/feat-test" ]; then
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 0 ] && [ -d ".worktrees/feat-test" ]; then
     test_pass "Test 1: Shell mode worktree directory created"
 else
-    test_fail "Test 1: Shell mode worktree directory NOT created" "Output: $(cat /tmp/test1.out)"
+    test_fail "Test 1: Shell mode failed" "Exit: $EXIT_CODE, Output: $(cat /tmp/test1.out)"
 fi
 
 # Test 2: Claude mode with worktree
 echo "Running Test 2..."
 ./claude-code-sandbox --worktree-branch=feat/test -c -n 'echo' >/tmp/test2.out 2>&1
-if grep -q ".worktrees/feat-test:/workspace" /tmp/test2.out; then
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 0 ] && grep -q ".worktrees/feat-test:/workspace" /tmp/test2.out; then
     test_pass "Test 2: Claude mode worktree mount path verified"
 else
-    test_fail "Test 2: Claude mode worktree mount check failed" "Output: $(cat /tmp/test2.out)"
+    test_fail "Test 2: Claude mode failed" "Exit: $EXIT_CODE, Output: $(cat /tmp/test2.out)"
 fi
 
 # Test 3: Non-interactive mode with worktree
 echo "Running Test 3..."
 ./claude-code-sandbox --worktree-branch=feat/test -n 'pwd' >/tmp/test3.out 2>&1
+EXIT_CODE=$?
 ABS_WT_PATH=$(cd .worktrees/feat-test && pwd)
-if grep -q "Using worktree: $ABS_WT_PATH" /tmp/test3.out; then
+if [ $EXIT_CODE -eq 0 ] && grep -q "Using worktree: $ABS_WT_PATH" /tmp/test3.out; then
     test_pass "Test 3: Non-interactive mode logs show worktree path"
 else
-    test_fail "Test 3: Non-interactive mode path mismatch" "Expected $ABS_WT_PATH. Output: $(cat /tmp/test3.out)"
+    test_fail "Test 3: Non-interactive mode failed" "Exit: $EXIT_CODE, Expected $ABS_WT_PATH. Output: $(cat /tmp/test3.out)"
 fi
 
 # Test 4: Relative path worktree
 echo "Running Test 4..."
 mkdir -p "$TEST_DIR/test-worktree-rel"
 ./claude-code-sandbox --worktree-branch=../test-worktree-rel -n 'pwd' >/tmp/test4.out 2>&1
+EXIT_CODE=$?
 ABS_REL_PATH=$(cd "$TEST_DIR/test-worktree-rel" && pwd)
-if grep -q "$ABS_REL_PATH:/workspace" /tmp/test4.out; then
+if [ $EXIT_CODE -eq 0 ] && grep -q "$ABS_REL_PATH:/workspace" /tmp/test4.out; then
     test_pass "Test 4: Relative path worktree verified"
 else
-    test_fail "Test 4: Relative path worktree failed" "Output: $(cat /tmp/test4.out)"
+    test_fail "Test 4: Relative path failed" "Exit: $EXIT_CODE, Output: $(cat /tmp/test4.out)"
 fi
 
 # Test 5: Non-existent branch (fallback to HEAD)
 echo "Running Test 5..."
 ./claude-code-sandbox --worktree-branch=nonexistent-branch -n 'ls' >/tmp/test5.out 2>&1
-if grep -q "falling back to HEAD" /tmp/test5.out && [ -d ".worktrees/nonexistent-branch" ]; then
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 0 ] && grep -q "falling back to HEAD" /tmp/test5.out && [ -d ".worktrees/nonexistent-branch" ]; then
     test_pass "Test 5: Fallback to HEAD worked"
 else
-    test_fail "Test 5: Fallback to HEAD failed" "Output: $(cat /tmp/test5.out)"
+    test_fail "Test 5: Fallback to HEAD failed" "Exit: $EXIT_CODE, Output: $(cat /tmp/test5.out)"
 fi
 
 # Test 6: Cleanup flag
 echo "Running Test 6..."
 ./claude-code-sandbox --worktree-branch=feat/test --cleanup-worktree -n 'echo cleaning' >/tmp/test6.out 2>&1
-if [ ! -d ".worktrees/feat-test" ]; then
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 0 ] && [ ! -d ".worktrees/feat-test" ]; then
     test_pass "Test 6: Cleanup worktree functionality worked"
 else
-    test_fail "Test 6: Cleanup worktree failed" "Worktree still exists. Output: $(cat /tmp/test6.out)"
+    test_fail "Test 6: Cleanup failed" "Exit: $EXIT_CODE, Worktree still exists. Output: $(cat /tmp/test6.out)"
 fi
 
 # Test 7: Path with slashes converted
 echo "Running Test 7..."
 ./claude-code-sandbox --worktree-branch=feature/feature-name -n 'ls' >/tmp/test7.out 2>&1
-if [ -d ".worktrees/feature-feature-name" ]; then
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 0 ] && [ -d ".worktrees/feature-feature-name" ]; then
     test_pass "Test 7: Slashes converted to dashes"
 else
-    test_fail "Test 7: Slash conversion failed" "Output: $(cat /tmp/test7.out)"
+    test_fail "Test 7: Slash conversion failed" "Exit: $EXIT_CODE, Output: $(cat /tmp/test7.out)"
 fi
 
 # Test 8: Worktree with --build flag
 echo "Running Test 8..."
 ./claude-code-sandbox --worktree-branch=feat/test --build -n 'echo' >/tmp/test8.out 2>&1
-if grep -q "Fake docker called with: build" /tmp/test8.out; then
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 0 ] && grep -q "Fake docker called with: build" /tmp/test8.out; then
     test_pass "Test 8: Worktree with --build flag called docker build"
 else
-    test_fail "Test 8: Worktree with --build flag failed" "Output: $(cat /tmp/test8.out)"
+    test_fail "Test 8: Worktree with --build flag failed" "Exit: $EXIT_CODE, Output: $(cat /tmp/test8.out)"
 fi
 
 # Summary

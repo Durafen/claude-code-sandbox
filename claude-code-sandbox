@@ -510,14 +510,14 @@ resolve_and_create_worktree() {
         # Check if branch exists in git (remote)
         if git branch -r | grep -q "origin/$branch_or_path"; then
             # If branch exists, add worktree from it
-            if ! git worktree add "$target_path" "$branch_or_path"; then
+            if ! git worktree add "$target_path" "$branch_or_path" >&2; then
                 echo "Error: Failed to create worktree at $target_path for branch $branch_or_path" >&2
                 exit 1
             fi
         else
             # If branch NOT exists, fallback to HEAD
             echo "Branch $branch_or_path not found in origin, falling back to HEAD" >&2
-            if ! git worktree add "$target_path" HEAD; then
+            if ! git worktree add "$target_path" HEAD >&2; then
                 echo "Error: Failed to create worktree at $target_path from HEAD" >&2
                 exit 1
             fi

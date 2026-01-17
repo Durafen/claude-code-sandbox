@@ -10,3 +10,6 @@
 test-venv/
 /CLAUDE.md
 .ai-cli.env
+
+# bv (beads viewer) local config and caches
+.bv/
