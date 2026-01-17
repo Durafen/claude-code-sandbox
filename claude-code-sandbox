@@ -47,6 +47,8 @@ REBUILD_IMAGE=false
 REMOVE_IMAGE=false
 SYNC_CONFIG=false
 CLAUDE_MODE=false
+WORKTREE_BRANCH=""
+CLEANUP_WORKTREE=false
 
 while getopts "bsndc-:" opt; do
     case $opt in
@@ -108,6 +110,16 @@ while getopts "bsndc-:" opt; do
                 remove)
                     REMOVE_IMAGE=true
                     ;;
+                worktree-branch=*)
+                    WORKTREE_BRANCH="${OPTARG#*=}"
+                    if [ -z "$WORKTREE_BRANCH" ]; then
+                        echo "Error: --worktree-branch requires a branch name" >&2
+                        exit 1
+                    fi
+                    ;;
+                cleanup-worktree)
+                    CLEANUP_WORKTREE=true
+                    ;;
                 help)
                     echo "Claude Code Sandbox - Containerized development environment"
                     echo ""
@@ -123,7 +135,10 @@ while getopts "bsndc-:" opt; do
                     echo "      --rebuild                 Force full rebuild without cache"
                     echo "      --remove                  Remove workspace image and state files"
                     echo "      --cleanup                 Remove old workspace images (default: 7+ days)"
+                    echo "      --cleanup-worktree        Remove all git worktrees managed by this script"
+                    echo "      --worktree-branch=BRANCH  Create/use a git worktree for the specified branch"
                     echo "      --sync-config             Sync host configs to sandbox (overwrites sandbox configs)"
+
                     echo "      --older-than=DAYS         Cleanup threshold (e.g. --older-than=3d)"
                     echo "      --dry-run                 Show what would be cleaned without doing it"
                     echo "      --help                    Show this help message"
@@ -141,6 +156,8 @@ while getopts "bsndc-:" opt; do
                     echo "  $0 --cleanup                  # Remove images older than 7 days"
                     echo "  $0 --cleanup --older-than=3d  # Remove images older than 3 days"
                     echo "  $0 --cleanup --dry-run        # Preview cleanup without removing"
+                    echo "  $0 --worktree-branch=feature  # Use a git worktree for 'feature' branch"
+                    echo "  $0 --cleanup-worktree         # Remove all managed git worktrees"
                     echo ""
                     echo "Auto-completion:"
                     echo "  Bash: source ./completions/claude-code-sandbox"
