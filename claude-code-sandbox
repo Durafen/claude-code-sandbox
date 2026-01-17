@@ -781,6 +781,51 @@ if [ -d "$SANDBOX_CONFIG_DIR/.local/state/opencode" ]; then
     echo "Using sandbox config: .local/state/opencode"
 fi
 
+# --- Port Detection and Flag Generation ---
+PORT_FLAGS=""
+DETECTED_PORTS_FILE="/tmp/detected_ports.json.$(date +%s%N)" # Use a unique temp file
+
+if [ -f "bin/detect-dev-ports.sh" ]; then
+    echo "Detecting open ports..."
+    # Execute the script and capture JSON output
+    if bin/detect-dev-ports.sh > "$DETECTED_PORTS_FILE" 2>/dev/null; then
+        # Parse JSON output using python
+        # Extract ports and format them as -p PORT:PORT
+        PORT_FLAGS=$(python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1], \'r\') as f:
+        data = json.load(f)
+    # Handle both array and dict forms
+    if isinstance(data, list):
+        ports = data
+    else:
+        ports = data.get(\'ports\', [])
+    if ports:
+        print(\' \'.join([f\'-p {p}:{p}\' for p in ports]))
+    else:
+        print(\'\')
+except Exception as e:
+    # Silently fail, let PORT_FLAGS remain empty
+    pass
+' "$DETECTED_PORTS_FILE" 2>/dev/null)
+
+        if [ -z "$PORT_FLAGS" ]; then
+            echo "No ports detected."
+        else
+            echo "Detected ports: $PORT_FLAGS"
+        fi
+    else
+        echo "Error running port detection script." >&2
+        # Fallback: PORT_FLAGS remains empty, no port forwarding will be applied
+    fi
+else
+    echo "Port detection script not found at bin/detect-dev-ports.sh. Skipping port detection." >&2
+fi
+# Clean up the temporary file
+rm -f "$DETECTED_PORTS_FILE"
+# --- End Port Detection ---
+
 # Check for basic-memory directory (basic-memory MCP server)
 if [ -d "$HOME/basic-memory" ]; then
     CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/basic-memory:/home/node/basic-memory"
@@ -821,6 +866,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             ${BEADS_MOUNT:+-v "$BEADS_MOUNT"} \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
+            $PORT_FLAGS \
              \
             -e TERM="$TERM" \
             --init \
@@ -834,6 +880,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             ${BEADS_MOUNT:+-v "$BEADS_MOUNT"} \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
+            $PORT_FLAGS \
              \
             --init \
             "$IMAGE_NAME" \
@@ -846,6 +893,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             ${BEADS_MOUNT:+-v "$BEADS_MOUNT"} \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
+            $PORT_FLAGS \
              \
             -e TERM="$TERM" \
             --init \

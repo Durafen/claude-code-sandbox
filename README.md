@@ -226,166 +226,80 @@ autoload -U compinit && compinit
 ```
 
 
-### .tool-versions File Support
+## Dev Server Port Forwarding
 
-If your workspace contains a `.tool-versions` file ([asdf standard](https://asdf-vm.com/manage/configuration.html#tool-versions)), the system will automatically install all specified tools when you run `--build` without `--install`:
+The `claude-code-sandbox` automatically detects and forwards common development server ports from the container to your host machine, enabling you to access your applications directly from your browser.
 
-Example `.tool-versions` file:
-```
-python 3.12.8
-nodejs 20.11.0
-java adoptopenjdk-17.0.2+8
-terraform 1.5.7
-```
+### How it Works
+When you run `claude-code-sandbox`, it first detects which ports are being listened on within the container using the `bin/detect-dev-ports.sh` script. It then automatically configures Docker to forward these detected ports to your host machine.
 
-**Usage Examples:**
-```bash
-# Automatic tool installation from .tool-versions
-claude-code-sandbox --build
+### Auto-Forwarded Ports
+The following ports are automatically detected and forwarded:
+- `3000`
+- `3001`
+- `5000`
+- `5001`
+- `5173`
+- `5174`
+- `8000`
+- `8001`
+- `8080`
+- `9000`
+- `9001`
 
-# Test installed tools work correctly
-claude-code-sandbox -n "python --version && java -version && terraform --version"
+### Accessing Dev Servers from Host
+Once the container is running and ports are forwarded, you can access your development servers by navigating to `http://localhost:<port>` in your web browser.
 
-# All tools are automatically available in both interactive and non-interactive modes
-claude-code-sandbox --shell  # Interactive shell with all tools in PATH
-```
+**Example Scenarios:**
 
-This eliminates the need to specify tools manually for projects that already use [asdf](https://asdf-vm.com/).
+-   **React Dev Server (e.g., Vite, Create React App):**
+    If your React application is running on port `3000` (e.g., via `npm run dev` or `yarn dev`), you can access it at `http://localhost:3000`.
+    *   Command inside container: `npm run dev` (or similar)
+    *   Access on host: `http://localhost:3000`
 
-### Workspace Management
+-   **Python Flask/Django Dev Server:**
+    If your Python web framework is running on port `5000` (e.g., `flask run` or `python manage.py runserver`), you can access it at `http://localhost:5000`.
+    *   Command inside container: `flask run` or `python manage.py runserver`
+    *   Access on host: `http://localhost:5000`
 
-The system provides several commands for managing workspace images and cleaning up disk space:
+-   **Vite Dev Server:**
+    If your Vite project is running on port `5173` (e.g., `npm run dev`), you can access it at `http://localhost:5173`.
+    *   Command inside container: `npm run dev`
+    *   Access on host: `http://localhost:5173`
 
-**Rebuild Options:**
-```bash
-# Standard rebuild (uses Docker cache)
-claude-code-sandbox --build
+### Troubleshooting Port Conflicts
 
-# Force complete rebuild without cache (useful for troubleshooting)
-claude-code-sandbox --rebuild
-```
+**Port Already In Use:**
+If you encounter an error like "address already in use" or if your dev server fails to start, it's likely that the port is already being used by another application on your host machine.
 
-**Workspace Cleanup:**
-```bash
-# Remove current workspace image and state files
-claude-code-sandbox --remove
+*   **Solution 1: Change the port inside the container:**
+    Edit your application's configuration or startup script to use a different, available port (e.g., `3001`, `8081`). The sandbox will automatically forward this new port.
+    *Example:* If port 3000 is taken, configure your app to run on 3001 and access it at `http://localhost:3001`.
 
-# Clean up old workspace images (7+ days old by default)
-claude-code-sandbox --cleanup
+*   **Solution 2: Free up the port on your host:**
+    Identify and stop the process on your host machine that is currently using the desired port.
+    *   **Linux/macOS:**
+        ```bash
+        # Find process using port 3000
+        sudo lsof -i :3000
+        # Kill the process (replace <PID> with the actual Process ID)
+        kill -9 <PID>
+        ```
 
-# Clean up images older than specific threshold (in days)
-claude-code-sandbox --cleanup --older-than=3
+**No Ports Detected/Forwarded:**
+If your development server is running but inaccessible via `localhost:<port>`, ensure:
+1.  The port is correctly detected by the container. You can manually check by entering the container's shell:
+    ```bash
+    claude-code-sandbox --shell
+    # Inside container:
+    bin/detect-dev-ports.sh
+    ```
+    If the port isn't listed, the application might not be binding to that port correctly, or the detection script needs an update.
+2.  The port is explicitly listed in the `bin/detect-dev-ports.sh` script. If you are using a custom port not in the default list, you may need to update the script.
+3.  The Docker daemon is running correctly and not experiencing network issues.
 
-# Preview what would be cleaned without actually doing it
-claude-code-sandbox --cleanup --dry-run
-```
-
-The cleanup commands help manage disk space by removing workspace images that haven't been used recently. Each workspace maintains its own Docker image, so cleanup is important for long-term disk usage management.
-
-### Workspace-Specific Images
-
-Each workspace (directory) automatically gets its own Docker image for complete isolation:
-
-```bash
-# First run in a workspace creates a unique image
-claude-code-sandbox --build
-# Created new workspace image: claude-code-sandbox-ax57fqxm
-
-# Subsequent runs use the same workspace-specific image
-claude-code-sandbox
-# Using existing workspace image: claude-code-sandbox-ax57fqxm
-```
-
-**How it works:**
-- A `.claude-code-sandbox` file is created in each workspace with a unique image name
-- This ensures different projects don't share Docker images or interfere with each other
-- Each workspace can have completely different tool configurations
-- You may want to add `.claude-code-sandbox` to your project's `.gitignore` (it's workspace-specific, not meant to be shared)
-
-### Shell Mode & Non-Interactive Testing
-
-**Interactive Shell Mode:**
-
-The `--shell` option launches an interactive bash shell inside the container instead of Claude Code:
-
-```bash
-claude-code-sandbox --shell
-```
-
-This is particularly useful for:
-- **Testing environment issues**: Debug problems with UV, Python, Node.js, or other tools
-- **Exploring the container**: See what tools and configurations are available
-- **Manual operations**: Run commands directly in the sandboxed environment
-- **Troubleshooting**: Investigate PATH issues, missing dependencies, or configuration problems
-
-Once in the shell, you can test tools like:
-```bash
-uv --version          # Test UV installation
-node --version        # Check Node.js
-claude-wrapper --help # Test Claude Code wrapper
-ls -la /home/node     # Check mounted configurations
-```
-
-**Non-Interactive Testing Mode:**
-
-The `--non-interactive` (or `-n`) flag allows you to run commands inside the container without requiring a TTY, perfect for testing and automation:
-
-```bash
-# Test Python installation
-claude-code-sandbox -n "python --version"
-
-# Test uv installation  
-claude-code-sandbox -n "uv --version"
-
-# Test uvx (tool runner)
-claude-code-sandbox -n "uvx cowsay --text 'Hello from uvx!'"
-
-# Test virtual environment workflow
-claude-code-sandbox -n "uv venv myenv && source myenv/bin/activate && uv pip install requests && python -c 'import requests; print(requests.__version__)'"
-
-# Test basic shell commands
-claude-code-sandbox -n "ls -la"
-
-# Test Docker functionality (requires -d flag)
-claude-code-sandbox -n -d "docker --version"
-claude-code-sandbox -n -d "docker ps"
-claude-code-sandbox -n -d "docker run --rm hello-world"
-```
-
-### Configuration
-
-The wrapper automatically detects and mounts the following configuration directories:
-
-- **Claude/Anthropic**: `~/.claude`, `~/.config/claude`, `~/.anthropic`, `~/.claude.json`
-- **Node.js**: `~/.npm`, `~/.pnpm-store`
-- **Python**: `~/.cache` (includes pip cache)
-- **Rust**: `~/.cargo`
-- **Go**: `~/go`
-- **Java**: `~/.gradle`, `~/.m2`
-- **Ruby**: `~/.gem`, `~/.bundle`
-- **Bun**: `~/.bun`
-- **.NET**: `~/.nuget`
-- **AI-CLI**: `~/.ai-cli/config.json`, `.ai-cli.env` (project root)
-- **Beads**: `.beads/` (project task tracking)
-
-### AI-CLI Configuration
-
-The sandbox includes [AI-CLI](https://github.com/Durafen/AI-Cli) for multi-model AI access. To configure API keys:
-
-1. Create a `.ai-cli.env` file in the project root (or copy from your AI-CLI installation):
-   ```bash
-   cp /path/to/ai-cli/.env .ai-cli.env
-   ```
-
-2. The file should contain your API keys:
-   ```env
-   OPENROUTER_API_KEY=sk-or-...
-   ANTHROPIC_API_KEY=sk-ant-...
-   OPENAI_API_KEY=sk-...
-   ```
-
-3. The `.ai-cli.env` file is automatically synced to the sandbox on first run and is already in `.gitignore` to protect your secrets.
-
+**Custom Ports:**
+If your development server uses a port *not* listed in `bin/detect-dev-ports.sh`, you will need to manually update that script to include your desired port for automatic detection and forwarding.
 ## Development Environment
 
 The Docker container includes:
@@ -404,12 +318,6 @@ The Docker container includes:
 - **Build-time**: Tools are installed during Docker build for optimal performance
 - **Isolation**: Each tool combination creates a separate Docker image
 
-### Performance Optimizations
-- **Shared Base Layers**: Common system packages and Claude Code installation are shared across all workspace images (~500MB shared)
-- **Incremental Builds**: Only rebuilds when Dockerfile or `.tool-versions` content actually changes
-- **Content Hashing**: Tracks configuration changes to avoid unnecessary rebuilds
-- **Layer Caching**: Docker layer caching minimizes build times for unchanged components
-
 ### Python Environment Details
 - **System Python**: Python 3 installed via Debian package manager at `/usr/bin/python3` with symlink at `/usr/local/bin/python`
 - **pip**: System pip3 available via Debian packages
@@ -422,8 +330,6 @@ The Docker container includes:
 - **Docker Access**: Optional Docker-in-Docker via socket mounting with `-d` flag
 
 ## Troubleshooting
-
-### Docker Build Issues
 
 If you encounter build issues:
 
@@ -520,15 +426,30 @@ claude-code-sandbox --remove
 
 ## How It Works
 
-1. **Workspace Image Management**: Each directory gets a unique Docker image name stored in `.claude-code-sandbox`
-2. **Multi-stage Building**: Creates shared base image (`claude-code-sandbox-base`) then workspace-specific layers
-3. **Incremental Builds**: Compares content hashes (Dockerfile + .tool-versions + --install) to determine if rebuild needed
-4. **Dynamic Tools**: If `--install` is specified, [asdf](https://asdf-vm.com/) plugins are installed during build time
-5. **Auto Tool Detection**: [`.tool-versions`](https://asdf-vm.com/manage/configuration.html#tool-versions) files are automatically parsed and installed if present
-6. **Configuration Detection**: Automatically detects and mounts common development configurations
-7. **Workspace Mounting**: Your current working directory is mounted as `/workspace` in the container
-8. **Secure Execution**: Claude Code runs in the sandboxed environment with access to your project files
-9. **Complete Isolation**: Each workspace has its own Docker image preventing tool conflicts between projects
+The sandbox provides a secure and isolated environment for running Claude Code.
+
+### Workspace Image Management
+- Each directory gets a unique Docker image name stored in `.claude-code-sandbox`
+- This ensures different projects don't share Docker images or interfere with each other
+- Each workspace can have completely different tool configurations
+- You may want to add `.claude-code-sandbox` to your project's `.gitignore` (it's workspace-specific, not meant to be shared)
+
+### Incremental Builds & Caching
+- **Shared Base Layers**: Common system packages and Claude Code installation are shared across all workspace images (~500MB shared)
+- **Incremental Builds**: Compares content hashes (Dockerfile + .tool-versions + --install) to determine if rebuild needed
+- **Content Hashing**: Tracks configuration changes to avoid unnecessary rebuilds
+- **Layer Caching**: Docker layer caching minimizes build times for unchanged components
+
+### Python Environment Details
+- **System Python**: Python 3 installed via Debian package manager at `/usr/bin/python3` with symlink at `/usr/local/bin/python`
+- **pip**: System pip3 available via Debian packages
+- **uv**: Modern Python package manager installed per-user in `/home/node/.local/bin/uv`
+- **Flexibility**: Users can use system Python directly or leverage uv for advanced package management
+
+### Container Architecture
+- **User**: Runs as non-root `node` user (UID 1000) for security
+- **Permissions**: Uses gosu for proper privilege dropping
+- **Docker Access**: Optional Docker-in-Docker via socket mounting with `-d` flag
 
 ## Security & Safety
 
