@@ -9,3 +9,4 @@
 # Test directories
 test-venv/
 /CLAUDE.md
+.ai-cli.env

@@ -395,6 +395,47 @@ sync_sandbox_config() {
         fi
     fi
 
+    # Sync .codex (OpenAI Codex CLI)
+    if [ -d "$HOME/.codex" ]; then
+        if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.codex" ]; then
+            echo "Syncing ~/.codex ..."
+            rm -rf "$SANDBOX_CONFIG_DIR/.codex"
+            cp -r "$HOME/.codex" "$SANDBOX_CONFIG_DIR/.codex"
+        fi
+    fi
+
+    # Sync .gemini (Google Gemini CLI)
+    if [ -d "$HOME/.gemini" ]; then
+        if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.gemini" ]; then
+            echo "Syncing ~/.gemini ..."
+            rm -rf "$SANDBOX_CONFIG_DIR/.gemini"
+            cp -r "$HOME/.gemini" "$SANDBOX_CONFIG_DIR/.gemini"
+        fi
+    fi
+
+    # Sync .ai-cli config (AI-CLI unified wrapper)
+    mkdir -p "$SANDBOX_CONFIG_DIR/.ai-cli"
+    if [ -f "$HOME/.ai-cli/config.json" ]; then
+        if [ "$force" = true ] || [ ! -f "$SANDBOX_CONFIG_DIR/.ai-cli/config.json" ]; then
+            echo "Syncing ~/.ai-cli/config.json ..."
+            cp "$HOME/.ai-cli/config.json" "$SANDBOX_CONFIG_DIR/.ai-cli/"
+        fi
+    fi
+    # .env from sandbox project directory (resolve symlinks)
+    local src="$0"
+    while [ -L "$src" ]; do
+        local dir="$(cd "$(dirname "$src")" && pwd)"
+        src="$(readlink "$src")"
+        [[ $src != /* ]] && src="$dir/$src"
+    done
+    local script_path="$(cd "$(dirname "$src")" && pwd)"
+    if [ -f "$script_path/.ai-cli.env" ]; then
+        if [ "$force" = true ] || [ ! -f "$SANDBOX_CONFIG_DIR/.ai-cli/.env" ]; then
+            echo "Syncing .ai-cli.env ..."
+            cp "$script_path/.ai-cli.env" "$SANDBOX_CONFIG_DIR/.ai-cli/.env"
+        fi
+    fi
+
     # Copy fresh credentials from Keychain (always sync credentials)
     if command -v security >/dev/null 2>&1; then
         CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
@@ -704,6 +745,28 @@ fi
 if [ -d "$SANDBOX_CONFIG_DIR/.qwen" ]; then
     CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.qwen:/home/node/.qwen"
     echo "Using sandbox config: .qwen"
+fi
+
+# Mount sandbox Codex config (OpenAI Codex CLI)
+if [ -d "$SANDBOX_CONFIG_DIR/.codex" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.codex:/home/node/.codex"
+    echo "Using sandbox config: .codex"
+fi
+
+# Mount sandbox Gemini config (Google Gemini CLI)
+if [ -d "$SANDBOX_CONFIG_DIR/.gemini" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.gemini:/home/node/.gemini"
+    echo "Using sandbox config: .gemini"
+fi
+
+# Mount AI-CLI config files (not the whole dir - repo is cloned there)
+if [ -f "$SANDBOX_CONFIG_DIR/.ai-cli/config.json" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.ai-cli/config.json:/home/node/.ai-cli/config.json"
+    echo "Using sandbox config: .ai-cli/config.json"
+fi
+if [ -f "$SANDBOX_CONFIG_DIR/.ai-cli/.env" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.ai-cli/.env:/home/node/.ai-cli/.env"
+    echo "Using sandbox config: .ai-cli/.env"
 fi
 
 # Mount sandbox opencode cache (overrides host ~/.cache/opencode)

@@ -47,6 +47,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     # Additional tools \
     ripgrep \
+    python3-pip \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 20 from NodeSource (required for Qwen Code)
@@ -75,8 +77,8 @@ RUN gosu 1000:1000 sh -c "git clone https://github.com/asdf-vm/asdf.git ~/.asdf 
 RUN gosu 1000:1000 sh -c "echo 'source \$HOME/.asdf/asdf.sh' >> ~/.bashrc && \
     echo 'source \$HOME/.asdf/completions/asdf.bash' >> ~/.bashrc"
 
-# Pre-install Claude Code, opencode, and Qwen Code as node user with npm prefix
-RUN gosu 1000:1000 sh -c "npm config set prefix ~/.npm-global && npm install -g @anthropic-ai/claude-code opencode-ai @qwen-code/qwen-code"
+# Pre-install Claude Code, opencode, Qwen Code, Codex, and Gemini CLI as node user with npm prefix
+RUN gosu 1000:1000 sh -c "npm config set prefix ~/.npm-global && npm install -g @anthropic-ai/claude-code opencode-ai @qwen-code/qwen-code @openai/codex @google/gemini-cli"
 
 # Add npm-global to PATH
 RUN gosu 1000:1000 sh -c "echo 'export PATH=\"\$HOME/.npm-global/bin:\$PATH\"' >> ~/.bashrc"
@@ -88,6 +90,11 @@ RUN gosu 1000:1000 sh -c "curl -LsSf https://astral.sh/uv/install.sh | sh"
 
 # Add uv to PATH in bashrc for the node user
 RUN gosu 1000:1000 sh -c "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+
+# Install AI-CLI (unified AI CLI wrapper) - https://github.com/Durafen/AI-Cli
+RUN gosu 1000:1000 sh -c "git clone https://github.com/Durafen/AI-Cli.git ~/.ai-cli && \
+    chmod +x ~/.ai-cli/ai.py"
+RUN ln -sf /home/node/.ai-cli/ai.py /usr/local/bin/ai
 
 # Install beads (bd) - task management for AI agents (pre-built binary)
 RUN ARCH=$(dpkg --print-architecture) && \
