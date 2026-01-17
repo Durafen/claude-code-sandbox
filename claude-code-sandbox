@@ -329,13 +329,13 @@ sync_sandbox_config() {
     echo "=== Syncing host configs to sandbox ==="
     mkdir -p "$SANDBOX_CONFIG_DIR"
 
-    # Sync .claude directory (skip broken symlinks)
+    # Sync .claude directory (skip broken symlinks and local npm install)
     if [ -d "$HOME/.claude" ]; then
         if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.claude" ]; then
             echo "Syncing ~/.claude ..."
             rm -rf "$SANDBOX_CONFIG_DIR/.claude"
             mkdir -p "$SANDBOX_CONFIG_DIR/.claude"
-            rsync -a --ignore-errors "$HOME/.claude/" "$SANDBOX_CONFIG_DIR/.claude/" 2>/dev/null
+            rsync -a --ignore-errors --exclude='local' "$HOME/.claude/" "$SANDBOX_CONFIG_DIR/.claude/" 2>/dev/null
         fi
     fi
 
@@ -494,6 +494,9 @@ setup_glm_config() {
 
         # Copy from existing Claude config
         cp -r "$SANDBOX_CONFIG_DIR/.claude" "$glm_dir"
+
+        # Remove local npm installation (container uses global install)
+        rm -rf "$glm_dir/local"
 
         # Remove Anthropic-specific credentials (GLM uses different auth)
         # These would cause authentication failures with z.ai proxy
