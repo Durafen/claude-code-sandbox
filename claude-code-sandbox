@@ -469,10 +469,65 @@ sync_sandbox_config() {
     echo "✅ Sandbox config synced to $SANDBOX_CONFIG_DIR"
 }
 
+# Function to resolve and create a git worktree
+resolve_and_create_worktree() {
+    local branch_or_path="$1"
+    local target_path=""
+
+    # Path Resolution Logic: absolute path or relative to parent
+    if [[ "$branch_or_path" == /* ]] || [[ "$branch_or_path" == ../* ]]; then
+        target_path="$branch_or_path"
+    else
+        # Auto-generate path: .worktrees/${branch//\//-}
+        local safe_branch="${branch_or_path//\//-}"
+        target_path=".worktrees/$safe_branch"
+    fi
+
+    # Worktree Creation Logic
+    if [[ -d "$target_path" ]]; then
+        # If exists: use it as-is
+        :
+    else
+        # Check if branch exists in git (remote)
+        if git branch -r | grep -q "origin/$branch_or_path"; then
+            # If branch exists, add worktree from it
+            if ! git worktree add "$target_path" "$branch_or_path"; then
+                echo "Error: Failed to create worktree at $target_path for branch $branch_or_path" >&2
+                exit 1
+            fi
+        else
+            # If branch NOT exists, fallback to HEAD
+            echo "Branch $branch_or_path not found in origin, falling back to HEAD" >&2
+            if ! git worktree add "$target_path" HEAD; then
+                echo "Error: Failed to create worktree at $target_path from HEAD" >&2
+                exit 1
+            fi
+        fi
+    fi
+
+    # Return the absolute path
+    echo "$(cd "$target_path" && pwd)"
+}
+
 # Handle sync-config mode
 if [[ "$SYNC_CONFIG" == true ]]; then
     sync_sandbox_config
     exit 0
+fi
+
+# Handle worktree creation and path resolution
+WORKTREE_PATH=""
+if [[ -n "$WORKTREE_BRANCH" ]]; then
+    # Resolve script source to absolute path before changing directory
+    if [[ "$0" == /* ]]; then
+        export SCRIPT_SOURCE="$0"
+    else
+        export SCRIPT_SOURCE="$(pwd)/$0"
+    fi
+    
+    WORKTREE_PATH=$(resolve_and_create_worktree "$WORKTREE_BRANCH")
+    echo "Using worktree: $WORKTREE_PATH"
+    cd "$WORKTREE_PATH" || exit 1
 fi
 
 # Handle remove mode
@@ -557,7 +612,7 @@ if [[ "$BUILD_IMAGE" == true && -z "$INSTALL_TOOLS" && -f ".tool-versions" ]]; t
 fi
 
 # Get the directory where this script is located (handles symlinks, portable)
-SCRIPT_SOURCE="$0"
+SCRIPT_SOURCE="${SCRIPT_SOURCE:-$0}"
 while [ -L "$SCRIPT_SOURCE" ]; do
     SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
     SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
