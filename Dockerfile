@@ -119,6 +119,11 @@ RUN echo '#!/bin/bash' > /usr/local/bin/claude-wrapper && \
     echo 'exec node --no-warnings --enable-source-maps "$CLAUDE_PATH" "$@"' >> /usr/local/bin/claude-wrapper && \
     chmod +x /usr/local/bin/claude-wrapper
 
+# Create cl alias for claude with --dangerously-skip-permissions
+RUN echo '#!/bin/bash' > /usr/local/bin/cl && \
+    echo 'exec claude --dangerously-skip-permissions "$@"' >> /usr/local/bin/cl && \
+    chmod +x /usr/local/bin/cl
+
 # Create a script to setup user and run commands
 RUN echo '#!/bin/bash' > /usr/local/bin/setup-and-run && \
     echo 'USER_ID=${HOST_USER_ID:-1000}' >> /usr/local/bin/setup-and-run && \

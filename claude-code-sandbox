@@ -36,7 +36,7 @@ fi
 
 # Parse command line options
 BUILD_IMAGE=false
-SHELL_MODE=false
+SHELL_MODE=true
 NON_INTERACTIVE=false
 DOCKER_ENABLED=false
 INSTALL_TOOLS=""
@@ -46,8 +46,9 @@ DRY_RUN=false
 REBUILD_IMAGE=false
 REMOVE_IMAGE=false
 SYNC_CONFIG=false
+CLAUDE_MODE=false
 
-while getopts "bsnd-:" opt; do
+while getopts "bsndc-:" opt; do
     case $opt in
         b)
             BUILD_IMAGE=true
@@ -60,6 +61,10 @@ while getopts "bsnd-:" opt; do
             ;;
         d)
             DOCKER_ENABLED=true
+            ;;
+        c)
+            CLAUDE_MODE=true
+            SHELL_MODE=false
             ;;
         -)
             case "${OPTARG}" in
@@ -77,6 +82,10 @@ while getopts "bsnd-:" opt; do
                     ;;
                 docker)
                     DOCKER_ENABLED=true
+                    ;;
+                claude)
+                    CLAUDE_MODE=true
+                    SHELL_MODE=false
                     ;;
                 cleanup)
                     CLEANUP_MODE=true
@@ -106,7 +115,8 @@ while getopts "bsnd-:" opt; do
                     echo ""
                     echo "Options:"
                     echo "  -b, --build                   Build/rebuild the Docker image"
-                    echo "  -s, --shell                   Launch interactive shell instead of Claude Code"
+                    echo "  -c, --claude                  Launch Claude Code"
+                    echo "  -s, --shell                   Launch interactive shell (default)"
                     echo "  -n, --non-interactive CMD     Run non-interactive command"
                     echo "  -d, --docker                  Enable Docker access inside container"
                     echo "      --install=TOOLS           Install tools at build time"
