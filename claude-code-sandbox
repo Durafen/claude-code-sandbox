@@ -293,64 +293,79 @@ fi
 # Sandbox config directory (persistent, protects host files)
 SANDBOX_CONFIG_DIR="$HOME/.claude-sandbox"
 
-# Function to sync host configs to sandbox
+# Function to sync host configs to sandbox (force mode overwrites existing)
 sync_sandbox_config() {
+    local force=${1:-true}  # Default to force mode for --sync-config
     echo "=== Syncing host configs to sandbox ==="
     mkdir -p "$SANDBOX_CONFIG_DIR"
 
     # Sync .claude directory (skip broken symlinks)
     if [ -d "$HOME/.claude" ]; then
-        echo "Syncing ~/.claude ..."
-        rm -rf "$SANDBOX_CONFIG_DIR/.claude"
-        mkdir -p "$SANDBOX_CONFIG_DIR/.claude"
-        rsync -a --ignore-errors "$HOME/.claude/" "$SANDBOX_CONFIG_DIR/.claude/" 2>/dev/null
+        if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.claude" ]; then
+            echo "Syncing ~/.claude ..."
+            rm -rf "$SANDBOX_CONFIG_DIR/.claude"
+            mkdir -p "$SANDBOX_CONFIG_DIR/.claude"
+            rsync -a --ignore-errors "$HOME/.claude/" "$SANDBOX_CONFIG_DIR/.claude/" 2>/dev/null
+        fi
     fi
 
     # Sync .claude.json
     if [ -f "$HOME/.claude.json" ]; then
-        echo "Syncing ~/.claude.json ..."
-        cp "$HOME/.claude.json" "$SANDBOX_CONFIG_DIR/.claude.json"
+        if [ "$force" = true ] || [ ! -f "$SANDBOX_CONFIG_DIR/.claude.json" ]; then
+            echo "Syncing ~/.claude.json ..."
+            cp "$HOME/.claude.json" "$SANDBOX_CONFIG_DIR/.claude.json"
+        fi
     fi
 
     # Sync .config/claude
     if [ -d "$HOME/.config/claude" ]; then
-        echo "Syncing ~/.config/claude ..."
-        mkdir -p "$SANDBOX_CONFIG_DIR/.config"
-        rm -rf "$SANDBOX_CONFIG_DIR/.config/claude"
-        cp -r "$HOME/.config/claude" "$SANDBOX_CONFIG_DIR/.config/claude"
+        if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.config/claude" ]; then
+            echo "Syncing ~/.config/claude ..."
+            mkdir -p "$SANDBOX_CONFIG_DIR/.config"
+            rm -rf "$SANDBOX_CONFIG_DIR/.config/claude"
+            cp -r "$HOME/.config/claude" "$SANDBOX_CONFIG_DIR/.config/claude"
+        fi
     fi
 
     # Sync .anthropic
     if [ -d "$HOME/.anthropic" ]; then
-        echo "Syncing ~/.anthropic ..."
-        rm -rf "$SANDBOX_CONFIG_DIR/.anthropic"
-        cp -r "$HOME/.anthropic" "$SANDBOX_CONFIG_DIR/.anthropic"
+        if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.anthropic" ]; then
+            echo "Syncing ~/.anthropic ..."
+            rm -rf "$SANDBOX_CONFIG_DIR/.anthropic"
+            cp -r "$HOME/.anthropic" "$SANDBOX_CONFIG_DIR/.anthropic"
+        fi
     fi
 
     # Sync .config/opencode
     if [ -d "$HOME/.config/opencode" ]; then
-        echo "Syncing ~/.config/opencode ..."
-        mkdir -p "$SANDBOX_CONFIG_DIR/.config"
-        rm -rf "$SANDBOX_CONFIG_DIR/.config/opencode"
-        cp -r "$HOME/.config/opencode" "$SANDBOX_CONFIG_DIR/.config/opencode"
+        if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.config/opencode" ]; then
+            echo "Syncing ~/.config/opencode ..."
+            mkdir -p "$SANDBOX_CONFIG_DIR/.config"
+            rm -rf "$SANDBOX_CONFIG_DIR/.config/opencode"
+            cp -r "$HOME/.config/opencode" "$SANDBOX_CONFIG_DIR/.config/opencode"
+        fi
     fi
 
     # Sync .local/share/opencode
     if [ -d "$HOME/.local/share/opencode" ]; then
-        echo "Syncing ~/.local/share/opencode ..."
-        mkdir -p "$SANDBOX_CONFIG_DIR/.local/share"
-        rm -rf "$SANDBOX_CONFIG_DIR/.local/share/opencode"
-        cp -r "$HOME/.local/share/opencode" "$SANDBOX_CONFIG_DIR/.local/share/opencode"
+        if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.local/share/opencode" ]; then
+            echo "Syncing ~/.local/share/opencode ..."
+            mkdir -p "$SANDBOX_CONFIG_DIR/.local/share"
+            rm -rf "$SANDBOX_CONFIG_DIR/.local/share/opencode"
+            cp -r "$HOME/.local/share/opencode" "$SANDBOX_CONFIG_DIR/.local/share/opencode"
+        fi
     fi
 
     # Sync .qwen (Qwen Code)
     if [ -d "$HOME/.qwen" ]; then
-        echo "Syncing ~/.qwen ..."
-        rm -rf "$SANDBOX_CONFIG_DIR/.qwen"
-        cp -r "$HOME/.qwen" "$SANDBOX_CONFIG_DIR/.qwen"
+        if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.qwen" ]; then
+            echo "Syncing ~/.qwen ..."
+            rm -rf "$SANDBOX_CONFIG_DIR/.qwen"
+            cp -r "$HOME/.qwen" "$SANDBOX_CONFIG_DIR/.qwen"
+        fi
     fi
 
-    # Copy fresh credentials from Keychain
+    # Copy fresh credentials from Keychain (always sync credentials)
     if command -v security >/dev/null 2>&1; then
         CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
         if [ -n "$CREDS" ]; then
@@ -361,6 +376,8 @@ sync_sandbox_config() {
         fi
     fi
 
+    # Mark sandbox as initialized
+    touch "$SANDBOX_CONFIG_DIR/.initialized"
     echo "✅ Sandbox config synced to $SANDBOX_CONFIG_DIR"
 }
 
@@ -544,10 +561,10 @@ fi
 # Check for Claude configuration directories
 CLAUDE_CONFIG=""
 
-# Auto-sync sandbox config on first run or if missing
-if [ ! -d "$SANDBOX_CONFIG_DIR/.claude" ]; then
+# Auto-sync sandbox config on first run only (check for .initialized marker)
+if [ ! -f "$SANDBOX_CONFIG_DIR/.initialized" ]; then
     echo "First run detected - syncing configs to sandbox..."
-    sync_sandbox_config
+    sync_sandbox_config false  # false = don't overwrite existing configs
 fi
 
 # Mount sandbox configs (persistent, protects host files)
