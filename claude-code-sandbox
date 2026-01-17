@@ -858,7 +858,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -e TERM="$TERM" \
             --init \
             "$IMAGE_NAME" \
-            bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; if ! command -v node >/dev/null 2>&1; then echo 'No Node.js found, installing LTS...'; asdf plugin add nodejs 2>/dev/null || true; asdf install nodejs lts; asdf global nodejs lts; fi; claude-wrapper --dangerously-skip-permissions $*"
+            bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; if ! command -v node >/dev/null 2>&1; then echo 'No Node.js found, installing LTS...'; asdf plugin add nodejs 2>/dev/null || true; asdf install nodejs lts; asdf global nodejs lts; fi; claude-wrapper --dangerously-skip-permissions $*"
     fi
 else
     echo "Error: This script requires an interactive terminal (TTY)."
