@@ -365,6 +365,26 @@ The wrapper automatically detects and mounts the following configuration directo
 - **Ruby**: `~/.gem`, `~/.bundle`
 - **Bun**: `~/.bun`
 - **.NET**: `~/.nuget`
+- **AI-CLI**: `~/.ai-cli/config.json`, `.ai-cli.env` (project root)
+- **Beads**: `.beads/` (project task tracking)
+
+### AI-CLI Configuration
+
+The sandbox includes [AI-CLI](https://github.com/Durafen/AI-Cli) for multi-model AI access. To configure API keys:
+
+1. Create a `.ai-cli.env` file in the project root (or copy from your AI-CLI installation):
+   ```bash
+   cp /path/to/ai-cli/.env .ai-cli.env
+   ```
+
+2. The file should contain your API keys:
+   ```env
+   OPENROUTER_API_KEY=sk-or-...
+   ANTHROPIC_API_KEY=sk-ant-...
+   OPENAI_API_KEY=sk-...
+   ```
+
+3. The `.ai-cli.env` file is automatically synced to the sandbox on first run and is already in `.gitignore` to protect your secrets.
 
 ## Development Environment
 
