@@ -45,6 +45,7 @@ CLEANUP_DAYS=7
 DRY_RUN=false
 REBUILD_IMAGE=false
 REMOVE_IMAGE=false
+SYNC_CONFIG=false
 
 while getopts "bsnd-:" opt; do
     case $opt in
@@ -80,6 +81,9 @@ while getopts "bsnd-:" opt; do
                 cleanup)
                     CLEANUP_MODE=true
                     ;;
+                sync-config)
+                    SYNC_CONFIG=true
+                    ;;
                 older-than=*)
                     CLEANUP_DAYS="${OPTARG#*=}"
                     # Parse days from format like "7d", "3", "14d"
@@ -109,6 +113,7 @@ while getopts "bsnd-:" opt; do
                     echo "      --rebuild                 Force full rebuild without cache"
                     echo "      --remove                  Remove workspace image and state files"
                     echo "      --cleanup                 Remove old workspace images (default: 7+ days)"
+                    echo "      --sync-config             Sync host configs to sandbox (overwrites sandbox configs)"
                     echo "      --older-than=DAYS         Cleanup threshold (e.g. --older-than=3d)"
                     echo "      --dry-run                 Show what would be cleaned without doing it"
                     echo "      --help                    Show this help message"
@@ -285,6 +290,79 @@ if [[ "$CLEANUP_MODE" == true ]]; then
     exit 0
 fi
 
+# Sandbox config directory (persistent, protects host files)
+SANDBOX_CONFIG_DIR="$HOME/.claude-sandbox"
+
+# Function to sync host configs to sandbox
+sync_sandbox_config() {
+    echo "=== Syncing host configs to sandbox ==="
+    mkdir -p "$SANDBOX_CONFIG_DIR"
+
+    # Sync .claude directory (skip broken symlinks)
+    if [ -d "$HOME/.claude" ]; then
+        echo "Syncing ~/.claude ..."
+        rm -rf "$SANDBOX_CONFIG_DIR/.claude"
+        mkdir -p "$SANDBOX_CONFIG_DIR/.claude"
+        rsync -a --ignore-errors "$HOME/.claude/" "$SANDBOX_CONFIG_DIR/.claude/" 2>/dev/null
+    fi
+
+    # Sync .claude.json
+    if [ -f "$HOME/.claude.json" ]; then
+        echo "Syncing ~/.claude.json ..."
+        cp "$HOME/.claude.json" "$SANDBOX_CONFIG_DIR/.claude.json"
+    fi
+
+    # Sync .config/claude
+    if [ -d "$HOME/.config/claude" ]; then
+        echo "Syncing ~/.config/claude ..."
+        mkdir -p "$SANDBOX_CONFIG_DIR/.config"
+        rm -rf "$SANDBOX_CONFIG_DIR/.config/claude"
+        cp -r "$HOME/.config/claude" "$SANDBOX_CONFIG_DIR/.config/claude"
+    fi
+
+    # Sync .anthropic
+    if [ -d "$HOME/.anthropic" ]; then
+        echo "Syncing ~/.anthropic ..."
+        rm -rf "$SANDBOX_CONFIG_DIR/.anthropic"
+        cp -r "$HOME/.anthropic" "$SANDBOX_CONFIG_DIR/.anthropic"
+    fi
+
+    # Sync .config/opencode
+    if [ -d "$HOME/.config/opencode" ]; then
+        echo "Syncing ~/.config/opencode ..."
+        mkdir -p "$SANDBOX_CONFIG_DIR/.config"
+        rm -rf "$SANDBOX_CONFIG_DIR/.config/opencode"
+        cp -r "$HOME/.config/opencode" "$SANDBOX_CONFIG_DIR/.config/opencode"
+    fi
+
+    # Sync .local/share/opencode
+    if [ -d "$HOME/.local/share/opencode" ]; then
+        echo "Syncing ~/.local/share/opencode ..."
+        mkdir -p "$SANDBOX_CONFIG_DIR/.local/share"
+        rm -rf "$SANDBOX_CONFIG_DIR/.local/share/opencode"
+        cp -r "$HOME/.local/share/opencode" "$SANDBOX_CONFIG_DIR/.local/share/opencode"
+    fi
+
+    # Copy fresh credentials from Keychain
+    if command -v security >/dev/null 2>&1; then
+        CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+        if [ -n "$CREDS" ]; then
+            mkdir -p "$SANDBOX_CONFIG_DIR/.claude"
+            echo "$CREDS" > "$SANDBOX_CONFIG_DIR/.claude/.credentials.json"
+            chmod 600 "$SANDBOX_CONFIG_DIR/.claude/.credentials.json"
+            echo "Synced credentials from Keychain"
+        fi
+    fi
+
+    echo "✅ Sandbox config synced to $SANDBOX_CONFIG_DIR"
+}
+
+# Handle sync-config mode
+if [[ "$SYNC_CONFIG" == true ]]; then
+    sync_sandbox_config
+    exit 0
+fi
+
 # Handle remove mode
 if [[ "$REMOVE_IMAGE" == true ]]; then
     HASH_FILE=".claude-code-sandbox-hash"
@@ -458,48 +536,27 @@ fi
 
 # Check for Claude configuration directories
 CLAUDE_CONFIG=""
-CREDS_TEMP_FILE=""
 
-# Cleanup function for temp files
-cleanup() {
-    if [ -n "$CREDS_TEMP_FILE" ] && [ -f "$CREDS_TEMP_FILE" ]; then
-        rm -f "$CREDS_TEMP_FILE"
-    fi
-}
-trap cleanup EXIT
-
-# Extract Claude OAuth credentials from macOS Keychain and write to temp file
-if command -v security >/dev/null 2>&1; then
-    CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
-    if [ -n "$CREDS" ]; then
-        CREDS_TEMP_FILE=$(mktemp)
-        echo "$CREDS" > "$CREDS_TEMP_FILE"
-        chmod 600 "$CREDS_TEMP_FILE"
-        echo "Using Claude credentials from macOS Keychain"
-    fi
+# Auto-sync sandbox config on first run or if missing
+if [ ! -d "$SANDBOX_CONFIG_DIR/.claude" ]; then
+    echo "First run detected - syncing configs to sandbox..."
+    sync_sandbox_config
 fi
 
-# Check for .claude directory
-if [ -d "$HOME/.claude" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.claude:/home/node/.claude"
-    echo "Mounting Claude config from $HOME/.claude"
+# Mount sandbox configs (persistent, protects host files)
+if [ -d "$SANDBOX_CONFIG_DIR/.claude" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.claude:/home/node/.claude"
+    echo "Using sandbox config: .claude"
 fi
 
-# Mount credentials file (after .claude dir to override)
-if [ -n "$CREDS_TEMP_FILE" ] && [ -f "$CREDS_TEMP_FILE" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $CREDS_TEMP_FILE:/home/node/.claude/.credentials.json:ro"
+if [ -d "$SANDBOX_CONFIG_DIR/.config/claude" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.config/claude:/home/node/.config/claude"
+    echo "Using sandbox config: .config/claude"
 fi
 
-# Check for .config/claude directory
-if [ -d "$HOME/.config/claude" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.config/claude:/home/node/.config/claude"
-    echo "Mounting Claude config from $HOME/.config/claude"
-fi
-
-# Check for .anthropic directory
-if [ -d "$HOME/.anthropic" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.anthropic:/home/node/.anthropic"
-    echo "Mounting Anthropic config from $HOME/.anthropic"
+if [ -d "$SANDBOX_CONFIG_DIR/.anthropic" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.anthropic:/home/node/.anthropic"
+    echo "Using sandbox config: .anthropic"
 fi
 
 # Check for .m2 directory (Maven)
@@ -571,22 +628,22 @@ if [ -d "$HOME/.bun" ]; then
     echo "Mounting Bun config from $HOME/.bun"
 fi
 
-# Check for .claude.json file (main Claude config)
-if [ -f "$HOME/.claude.json" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.claude.json:/home/node/.claude.json"
-    echo "Mounting Claude config from $HOME/.claude.json"
+# Mount sandbox .claude.json
+if [ -f "$SANDBOX_CONFIG_DIR/.claude.json" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.claude.json:/home/node/.claude.json"
+    echo "Using sandbox config: .claude.json"
 fi
 
-# Check for opencode config
-if [ -d "$HOME/.config/opencode" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.config/opencode:/home/node/.config/opencode"
-    echo "Mounting opencode config from $HOME/.config/opencode"
+# Mount sandbox opencode config
+if [ -d "$SANDBOX_CONFIG_DIR/.config/opencode" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.config/opencode:/home/node/.config/opencode"
+    echo "Using sandbox config: .config/opencode"
 fi
 
-# Check for opencode data (auth, storage, etc.)
-if [ -d "$HOME/.local/share/opencode" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.local/share/opencode:/home/node/.local/share/opencode"
-    echo "Mounting opencode data from $HOME/.local/share/opencode"
+# Mount sandbox opencode data
+if [ -d "$SANDBOX_CONFIG_DIR/.local/share/opencode" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.local/share/opencode:/home/node/.local/share/opencode"
+    echo "Using sandbox config: .local/share/opencode"
 fi
 
 # Check for basic-memory directory (basic-memory MCP server)
