@@ -86,6 +86,11 @@ RUN gosu 1000:1000 sh -c "curl -LsSf https://astral.sh/uv/install.sh | sh"
 # Add uv to PATH in bashrc for the node user
 RUN gosu 1000:1000 sh -c "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
 
+# Install beads (bd) - task management for AI agents (pre-built binary)
+RUN ARCH=$(dpkg --print-architecture) && \
+    BD_VERSION=$(curl -sL https://api.github.com/repos/steveyegge/beads/releases/latest | grep tag_name | cut -d'"' -f4) && \
+    curl -sL "https://github.com/steveyegge/beads/releases/download/${BD_VERSION}/bd_linux_${ARCH}.tar.gz" | tar -xz -C /usr/local/bin bd
+
 # Add node user to docker group for Docker socket access
 RUN addgroup docker || true && adduser node docker
 

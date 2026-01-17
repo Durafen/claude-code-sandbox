@@ -366,8 +366,14 @@ if [[ "$BUILD_IMAGE" == true && -z "$INSTALL_TOOLS" && -f ".tool-versions" ]]; t
     fi
 fi
 
-# Get the directory where this script is located (handles symlinks)
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+# Get the directory where this script is located (handles symlinks, portable)
+SCRIPT_SOURCE="$0"
+while [ -L "$SCRIPT_SOURCE" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+    SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+    [[ $SCRIPT_SOURCE != /* ]] && SCRIPT_SOURCE="$SCRIPT_DIR/$SCRIPT_SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 
 # Check if base image needs to be built/updated
 BASE_IMAGE_EXISTS="$(docker images -q $BASE_IMAGE_NAME 2> /dev/null)"
@@ -587,6 +593,12 @@ fi
 if [ -d "$HOME/basic-memory" ]; then
     CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/basic-memory:/home/node/basic-memory"
     echo "Mounting basic-memory MCP server from $HOME/basic-memory"
+fi
+
+# Check for .beads directory (beads task management)
+if [ -d "$(pwd)/.beads" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $(pwd)/.beads:/workspace/.beads"
+    echo "Mounting beads task directory from $(pwd)/.beads"
 fi
 
 # Add Docker socket mounting if Docker flag is enabled
