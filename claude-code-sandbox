@@ -36,7 +36,7 @@ fi
 
 # Parse command line options
 BUILD_IMAGE=false
-SHELL_MODE=true
+SHELL_MODE=false
 NON_INTERACTIVE=false
 DOCKER_ENABLED=false
 INSTALL_TOOLS=""
@@ -46,7 +46,7 @@ DRY_RUN=false
 REBUILD_IMAGE=false
 REMOVE_IMAGE=false
 SYNC_CONFIG=false
-CLAUDE_MODE=false
+CLAUDE_MODE=true
 
 while getopts "bsndc-:" opt; do
     case $opt in
@@ -115,8 +115,8 @@ while getopts "bsndc-:" opt; do
                     echo ""
                     echo "Options:"
                     echo "  -b, --build                   Build/rebuild the Docker image"
-                    echo "  -c, --claude                  Launch Claude Code"
-                    echo "  -s, --shell                   Launch interactive shell (default)"
+                    echo "  -c, --claude                  Launch Claude Code (default)"
+                    echo "  -s, --shell                   Launch interactive shell"
                     echo "  -n, --non-interactive CMD     Run non-interactive command"
                     echo "  -d, --docker                  Enable Docker access inside container"
                     echo "      --install=TOOLS           Install tools at build time"
@@ -138,6 +138,7 @@ while getopts "bsndc-:" opt; do
                     echo "  $0 --remove                   # Remove current workspace image"
                     echo "  $0 --shell                    # Interactive shell"
                     echo "  $0 -n 'python --version'     # Non-interactive command"
+                    echo "  $0 python --version          # Same as -n (positional args)"
                     echo "  $0 --cleanup                  # Remove images older than 7 days"
                     echo "  $0 --cleanup --older-than=3d  # Remove images older than 3 days"
                     echo "  $0 --cleanup --dry-run        # Preview cleanup without removing"
@@ -169,6 +170,13 @@ while getopts "bsndc-:" opt; do
 done
 
 shift $((OPTIND-1))
+
+# If positional arguments remain, treat them as a non-interactive command
+if [[ $# -gt 0 ]]; then
+    NON_INTERACTIVE=true
+    SHELL_MODE=false
+    set -- "$*"  # Combine all args into single command string
+fi
 
 # Function to perform image cleanup
 cleanup_images() {
