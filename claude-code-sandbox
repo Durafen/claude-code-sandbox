@@ -356,6 +356,26 @@ sync_sandbox_config() {
         fi
     fi
 
+    # Sync .cache/opencode (isolated from host cache)
+    if [ -d "$HOME/.cache/opencode" ]; then
+        if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.cache/opencode" ]; then
+            echo "Syncing ~/.cache/opencode ..."
+            mkdir -p "$SANDBOX_CONFIG_DIR/.cache"
+            rm -rf "$SANDBOX_CONFIG_DIR/.cache/opencode"
+            cp -r "$HOME/.cache/opencode" "$SANDBOX_CONFIG_DIR/.cache/opencode"
+        fi
+    fi
+
+    # Sync .local/state/opencode (model selection, favorites, history)
+    if [ -d "$HOME/.local/state/opencode" ]; then
+        if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.local/state/opencode" ]; then
+            echo "Syncing ~/.local/state/opencode ..."
+            mkdir -p "$SANDBOX_CONFIG_DIR/.local/state"
+            rm -rf "$SANDBOX_CONFIG_DIR/.local/state/opencode"
+            cp -r "$HOME/.local/state/opencode" "$SANDBOX_CONFIG_DIR/.local/state/opencode"
+        fi
+    fi
+
     # Sync .qwen (Qwen Code)
     if [ -d "$HOME/.qwen" ]; then
         if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.qwen" ]; then
@@ -674,6 +694,18 @@ fi
 if [ -d "$SANDBOX_CONFIG_DIR/.qwen" ]; then
     CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.qwen:/home/node/.qwen"
     echo "Using sandbox config: .qwen"
+fi
+
+# Mount sandbox opencode cache (overrides host ~/.cache/opencode)
+if [ -d "$SANDBOX_CONFIG_DIR/.cache/opencode" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.cache/opencode:/home/node/.cache/opencode"
+    echo "Using sandbox config: .cache/opencode"
+fi
+
+# Mount sandbox opencode state (model selection, favorites, history)
+if [ -d "$SANDBOX_CONFIG_DIR/.local/state/opencode" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.local/state/opencode:/home/node/.local/state/opencode"
+    echo "Using sandbox config: .local/state/opencode"
 fi
 
 # Check for basic-memory directory (basic-memory MCP server)
