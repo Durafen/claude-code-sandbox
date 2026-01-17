@@ -47,8 +47,9 @@ REBUILD_IMAGE=false
 REMOVE_IMAGE=false
 SYNC_CONFIG=false
 CLAUDE_MODE=true
+GLM_MODE=false
 
-while getopts "bsndc-:" opt; do
+while getopts "bsndcg-:" opt; do
     case $opt in
         b)
             BUILD_IMAGE=true
@@ -63,6 +64,11 @@ while getopts "bsndc-:" opt; do
             DOCKER_ENABLED=true
             ;;
         c)
+            CLAUDE_MODE=true
+            SHELL_MODE=false
+            ;;
+        g)
+            GLM_MODE=true
             CLAUDE_MODE=true
             SHELL_MODE=false
             ;;
@@ -84,6 +90,11 @@ while getopts "bsndc-:" opt; do
                     DOCKER_ENABLED=true
                     ;;
                 claude)
+                    CLAUDE_MODE=true
+                    SHELL_MODE=false
+                    ;;
+                glm)
+                    GLM_MODE=true
                     CLAUDE_MODE=true
                     SHELL_MODE=false
                     ;;
@@ -116,6 +127,7 @@ while getopts "bsndc-:" opt; do
                     echo "Options:"
                     echo "  -b, --build                   Build/rebuild the Docker image"
                     echo "  -c, --claude                  Launch Claude Code (default)"
+                    echo "  -g, --glm                     Launch Claude Code in GLM mode (z.ai proxy)"
                     echo "  -s, --shell                   Launch interactive shell"
                     echo "  -n, --non-interactive CMD     Run non-interactive command"
                     echo "  -d, --docker                  Enable Docker access inside container"
@@ -460,6 +472,50 @@ sync_sandbox_config() {
     echo "✅ Sandbox config synced to $SANDBOX_CONFIG_DIR"
 }
 
+# Determine which Claude config subfolder to use based on mode
+if [[ "$GLM_MODE" == "true" ]]; then
+    CLAUDE_CONFIG_SUBDIR=".claude-glm"
+else
+    CLAUDE_CONFIG_SUBDIR=".claude"
+fi
+
+# Function to setup GLM config on first GLM run
+setup_glm_config() {
+    local glm_dir="$SANDBOX_CONFIG_DIR/.claude-glm"
+
+    if [[ ! -d "$glm_dir" ]]; then
+        echo "🔧 Setting up GLM config (first run)..."
+
+        # Ensure base .claude config exists
+        if [[ ! -d "$SANDBOX_CONFIG_DIR/.claude" ]]; then
+            echo "Error: No base Claude config found. Run without -g first to sync configs."
+            exit 1
+        fi
+
+        # Copy from existing Claude config
+        cp -r "$SANDBOX_CONFIG_DIR/.claude" "$glm_dir"
+
+        # Copy GLM-specific settings.json from repo template
+        if [[ -f "$SCRIPT_DIR/configs/glm/settings.json" ]]; then
+            cp "$SCRIPT_DIR/configs/glm/settings.json" "$glm_dir/settings.json"
+        fi
+
+        # Copy GLM statusline script
+        if [[ -f "$SCRIPT_DIR/configs/glm/statusline-robbyrussell.sh" ]]; then
+            cp "$SCRIPT_DIR/configs/glm/statusline-robbyrussell.sh" "$glm_dir/"
+            chmod +x "$glm_dir/statusline-robbyrussell.sh"
+        fi
+
+        # Copy GLM-specific MCP config if present
+        if [[ -f "$SCRIPT_DIR/configs/glm/.mcp.json" ]]; then
+            cp "$SCRIPT_DIR/configs/glm/.mcp.json" "$glm_dir/"
+        fi
+
+        echo "✅ GLM config created at $glm_dir"
+        echo "⚠️  Add your ANTHROPIC_AUTH_TOKEN to $glm_dir/settings.json"
+    fi
+}
+
 # Handle sync-config mode
 if [[ "$SYNC_CONFIG" == true ]]; then
     sync_sandbox_config
@@ -646,10 +702,16 @@ if [ ! -f "$SANDBOX_CONFIG_DIR/.initialized" ]; then
     sync_sandbox_config false  # false = don't overwrite existing configs
 fi
 
+# Setup GLM config on first GLM run
+if [[ "$GLM_MODE" == "true" ]]; then
+    setup_glm_config
+fi
+
 # Mount sandbox configs (persistent, protects host files)
-if [ -d "$SANDBOX_CONFIG_DIR/.claude" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.claude:/home/node/.claude"
-    echo "Using sandbox config: .claude"
+# Use CLAUDE_CONFIG_SUBDIR to support both Claude and GLM modes
+if [ -d "$SANDBOX_CONFIG_DIR/$CLAUDE_CONFIG_SUBDIR" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/$CLAUDE_CONFIG_SUBDIR:/home/node/.claude"
+    echo "Using Claude config: $SANDBOX_CONFIG_DIR/$CLAUDE_CONFIG_SUBDIR"
 fi
 
 if [ -d "$SANDBOX_CONFIG_DIR/.config/claude" ]; then

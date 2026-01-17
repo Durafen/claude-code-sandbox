@@ -111,6 +111,19 @@ On first execution, the Docker image will be automatically built:
 claude-code-sandbox
 ```
 
+### Dual Mode (Claude / GLM)
+
+Run Claude Code with different API backends:
+
+```bash
+./claude-code-sandbox -c     # Claude mode (Anthropic API) - default
+./claude-code-sandbox -g     # GLM mode (z.ai proxy)
+```
+
+Both modes can run simultaneously in different terminals. Each uses separate config directories:
+- Claude mode: `~/.claude-sandbox/.claude/`
+- GLM mode: `~/.claude-sandbox/.claude-glm/`
+
 ### Tool Installation (asdf-based)
 
 **Install any development tools you need using the `--install` flag:**

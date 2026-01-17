@@ -10,3 +10,4 @@
 test-venv/
 /CLAUDE.md
 .ai-cli.env
+.claude-glm-backup
