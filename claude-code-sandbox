@@ -495,7 +495,19 @@ setup_glm_config() {
         # Copy from existing Claude config
         cp -r "$SANDBOX_CONFIG_DIR/.claude" "$glm_dir"
 
-        # Copy GLM-specific settings.json from repo template
+        # Remove Anthropic-specific credentials (GLM uses different auth)
+        # These would cause authentication failures with z.ai proxy
+        rm -f "$glm_dir/.credentials.json"
+        rm -f "$glm_dir/.credentials"
+        rm -f "$glm_dir/statsig_cache.json"
+        rm -f "$glm_dir/stats-cache.json"
+        rm -f "$glm_dir/.statsig"
+        rm -rf "$glm_dir/statsig"
+        rm -rf "$glm_dir/telemetry"
+
+        echo "  Cleared Anthropic credentials and telemetry (GLM uses ANTHROPIC_AUTH_TOKEN instead)"
+
+        # Copy GLM-specific settings.json from repo template (always overwrite - Claude's settings are wrong for GLM)
         if [[ -f "$SCRIPT_DIR/configs/glm/settings.json" ]]; then
             cp "$SCRIPT_DIR/configs/glm/settings.json" "$glm_dir/settings.json"
         fi
@@ -506,13 +518,20 @@ setup_glm_config() {
             chmod +x "$glm_dir/statusline-robbyrussell.sh"
         fi
 
-        # Copy GLM-specific MCP config if present
+        # Copy GLM-specific MCP config from repo template (always overwrite)
         if [[ -f "$SCRIPT_DIR/configs/glm/.mcp.json" ]]; then
             cp "$SCRIPT_DIR/configs/glm/.mcp.json" "$glm_dir/"
         fi
 
+        # Copy GLM-specific .claude.json (only if not already exists - preserve user's keys)
+        if [[ -f "$SCRIPT_DIR/configs/glm/.claude.json" ]] && [[ ! -f "$SANDBOX_CONFIG_DIR/.claude-glm.json" ]]; then
+            cp "$SCRIPT_DIR/configs/glm/.claude.json" "$SANDBOX_CONFIG_DIR/.claude-glm.json"
+            echo "  Created GLM-specific .claude.json"
+        fi
+
         echo "✅ GLM config created at $glm_dir"
         echo "⚠️  Add your ANTHROPIC_AUTH_TOKEN to $glm_dir/settings.json"
+        echo "⚠️  Add your API keys to $SANDBOX_CONFIG_DIR/.claude-glm.json"
     fi
 }
 
@@ -793,8 +812,11 @@ if [ -d "$HOME/.bun" ]; then
     echo "Mounting Bun config from $HOME/.bun"
 fi
 
-# Mount sandbox .claude.json
-if [ -f "$SANDBOX_CONFIG_DIR/.claude.json" ]; then
+# Mount sandbox .claude.json (use GLM-specific version in GLM mode)
+if [[ "$GLM_MODE" == "true" ]] && [ -f "$SANDBOX_CONFIG_DIR/.claude-glm.json" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.claude-glm.json:/home/node/.claude.json"
+    echo "Using GLM config: .claude-glm.json"
+elif [ -f "$SANDBOX_CONFIG_DIR/.claude.json" ]; then
     CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.claude.json:/home/node/.claude.json"
     echo "Using sandbox config: .claude.json"
 fi

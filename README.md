@@ -124,6 +124,40 @@ Both modes can run simultaneously in different terminals. Each uses separate con
 - Claude mode: `~/.claude-sandbox/.claude/`
 - GLM mode: `~/.claude-sandbox/.claude-glm/`
 
+#### GLM Mode Setup (First Run)
+
+1. Run with `-g` flag - config is auto-created:
+   ```bash
+   ./claude-code-sandbox -g
+   ```
+
+2. Add your z.ai token to `~/.claude-sandbox/.claude-glm/settings.json`:
+   ```json
+   "env": {
+     "ANTHROPIC_AUTH_TOKEN": "your-z.ai-token-here",
+     ...
+   }
+   ```
+
+3. Add MCP API keys to `~/.claude-sandbox/.claude-glm.json`:
+   ```json
+   "mcpServers": {
+     "brave-search": {
+       "env": { "BRAVE_API_KEY": "your-key" }
+     },
+     "firecrawl": {
+       "env": { "FIRECRAWL_API_KEY": "your-key" }
+     }
+   }
+   ```
+
+4. On first run, when prompted "Do you want to use this API key?", select **Yes**
+
+5. Run again - no more prompts:
+   ```bash
+   ./claude-code-sandbox -g
+   ```
+
 ### Tool Installation (asdf-based)
 
 **Install any development tools you need using the `--install` flag:**
