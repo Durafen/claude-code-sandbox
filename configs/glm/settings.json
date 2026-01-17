@@ -6,7 +6,8 @@
     "API_TIMEOUT_MS": "3000000",
     "DISABLE_TELEMETRY": "1",
     "DISABLE_ERROR_REPORTING": "1",
-    "DISABLE_BUG_COMMAND": "1"
+    "DISABLE_BUG_COMMAND": "1",
+    "ENABLE_EXPERIMENTAL_MCP_CLI": "1"
   },
   "includeCoAuthoredBy": false,
   "model": "opus",

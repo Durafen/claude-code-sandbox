@@ -158,6 +158,20 @@ Both modes can run simultaneously in different terminals. Each uses separate con
    ./claude-code-sandbox -g
    ```
 
+#### Running z.ai Coding Helper in GLM Mode
+
+The z.ai coding helper tool can be run inside the GLM sandbox shell:
+
+```bash
+# Enter GLM sandbox shell
+./claude-code-sandbox -g -s
+
+# Inside the shell, run the coding helper
+npx @z_ai/coding-helper
+```
+
+This provides z.ai-specific utilities and configuration helpers within the isolated sandbox environment.
+
 ### Tool Installation (asdf-based)
 
 **Install any development tools you need using the `--install` flag:**
