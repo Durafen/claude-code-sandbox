@@ -509,6 +509,29 @@ resolve_and_create_worktree() {
     echo "$(cd "$target_path" && pwd)"
 }
 
+cleanup_worktree() {
+    local worktree_path="$1"
+    
+    if [[ -z "$worktree_path" ]] || [[ ! -d "$worktree_path" ]]; then
+        echo "No worktree to clean up"
+        return 0
+    fi
+    
+    echo "Cleaning up worktree at $worktree_path..."
+    
+    # Change back to parent before removing
+    cd ..
+    
+    # Remove the worktree
+    if git worktree remove "$worktree_path" --force 2>/dev/null; then
+        echo "✅ Worktree removed successfully"
+        return 0
+    else
+        echo "⚠️  Failed to remove worktree (may need manual cleanup)"
+        return 1
+    fi
+}
+
 # Handle sync-config mode
 if [[ "$SYNC_CONFIG" == true ]]; then
     sync_sandbox_config
@@ -934,6 +957,12 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             --init \
             "$IMAGE_NAME" \
             bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; if ! command -v node >/dev/null 2>&1; then echo 'No Node.js found, installing LTS...'; asdf plugin add nodejs 2>/dev/null || true; asdf install nodejs lts; asdf global nodejs lts; fi; claude-wrapper --dangerously-skip-permissions $*"
+    fi
+
+    # Setup cleanup on exit if worktree cleanup requested
+    if [[ "$CLEANUP_WORKTREE" == true && -n "$WORKTREE_PATH" ]]; then
+        trap "cleanup_worktree \"$WORKTREE_PATH\"" EXIT
+        echo "Worktree cleanup will run on exit"
     fi
 else
     echo "Error: This script requires an interactive terminal (TTY)."
