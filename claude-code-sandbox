@@ -836,13 +836,13 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; exec bash"
     elif [ "$NON_INTERACTIVE" = true ]; then
         # Run non-interactive command with asdf support
-        docker run --rm \
+        docker run -it --rm \
             --user node \
             -v "$(pwd):/workspace" \
             ${BEADS_MOUNT:+-v "$BEADS_MOUNT"} \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
-             \
+            -e TERM="$TERM" \
             --init \
             "$IMAGE_NAME" \
             bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; $*"
