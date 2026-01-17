@@ -819,6 +819,13 @@ if [ -d "$SANDBOX_CONFIG_DIR/.qwen" ]; then
     echo "Using sandbox config: .qwen"
 fi
 
+# Check for worktree path and mount if set
+WORKTREE_MOUNT=""
+if [ -n "$WORKTREE_PATH" ]; then
+    WORKTREE_MOUNT="-v $WORKTREE_PATH:/workspace"
+    echo "Mounting worktree from $WORKTREE_PATH"
+fi
+
 # Mount sandbox Codex config (OpenAI Codex CLI)
 if [ -d "$SANDBOX_CONFIG_DIR/.codex" ]; then
     CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.codex:/home/node/.codex"
@@ -859,6 +866,10 @@ if [ -d "$HOME/basic-memory" ]; then
     echo "Mounting basic-memory MCP server from $HOME/basic-memory"
 fi
 
+# Handle workspace mounting
+# Note: handled via WORKSPACE_MOUNT to support paths with spaces consistently
+WORKSPACE_MOUNT="$(pwd):/workspace"
+
 # Check for .beads directory (beads task management)
 # Note: handled separately via BEADS_MOUNT to support paths with spaces
 BEADS_MOUNT=""
@@ -889,7 +900,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
         # Run interactive shell instead of Claude Code
         docker run -it --rm \
             --user node \
-            -v "$(pwd):/workspace" \
+            ${WORKTREE_MOUNT:--v "$(pwd):/workspace"} \
             ${BEADS_MOUNT:+-v "$BEADS_MOUNT"} \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
@@ -902,7 +913,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
         # Run non-interactive command with asdf support
         docker run --rm \
             --user node \
-            -v "$(pwd):/workspace" \
+            ${WORKTREE_MOUNT:--v "$(pwd):/workspace"} \
             ${BEADS_MOUNT:+-v "$BEADS_MOUNT"} \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
@@ -914,7 +925,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
         # Run the container with current directory mounted as workspace
         docker run -it --rm \
             --user node \
-            -v "$(pwd):/workspace" \
+            ${WORKTREE_MOUNT:--v "$(pwd):/workspace"} \
             ${BEADS_MOUNT:+-v "$BEADS_MOUNT"} \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
