@@ -30,8 +30,6 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     lsb-release \
-    nodejs \
-    npm \
     # Dependencies for asdf and language builds \
     coreutils \
     autoconf \
@@ -50,6 +48,11 @@ RUN apt-get update && apt-get install -y \
     # Additional tools \
     ripgrep \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20 from NodeSource (required for Qwen Code)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
@@ -72,8 +75,8 @@ RUN gosu 1000:1000 sh -c "git clone https://github.com/asdf-vm/asdf.git ~/.asdf 
 RUN gosu 1000:1000 sh -c "echo 'source \$HOME/.asdf/asdf.sh' >> ~/.bashrc && \
     echo 'source \$HOME/.asdf/completions/asdf.bash' >> ~/.bashrc"
 
-# Pre-install Claude Code and opencode as node user with npm prefix
-RUN gosu 1000:1000 sh -c "npm config set prefix ~/.npm-global && npm install -g @anthropic-ai/claude-code opencode-ai"
+# Pre-install Claude Code, opencode, and Qwen Code as node user with npm prefix
+RUN gosu 1000:1000 sh -c "npm config set prefix ~/.npm-global && npm install -g @anthropic-ai/claude-code opencode-ai @qwen-code/qwen-code"
 
 # Add npm-global to PATH
 RUN gosu 1000:1000 sh -c "echo 'export PATH=\"\$HOME/.npm-global/bin:\$PATH\"' >> ~/.bashrc"

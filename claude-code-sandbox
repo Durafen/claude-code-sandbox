@@ -343,6 +343,13 @@ sync_sandbox_config() {
         cp -r "$HOME/.local/share/opencode" "$SANDBOX_CONFIG_DIR/.local/share/opencode"
     fi
 
+    # Sync .qwen (Qwen Code)
+    if [ -d "$HOME/.qwen" ]; then
+        echo "Syncing ~/.qwen ..."
+        rm -rf "$SANDBOX_CONFIG_DIR/.qwen"
+        cp -r "$HOME/.qwen" "$SANDBOX_CONFIG_DIR/.qwen"
+    fi
+
     # Copy fresh credentials from Keychain
     if command -v security >/dev/null 2>&1; then
         CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
@@ -644,6 +651,12 @@ fi
 if [ -d "$SANDBOX_CONFIG_DIR/.local/share/opencode" ]; then
     CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.local/share/opencode:/home/node/.local/share/opencode"
     echo "Using sandbox config: .local/share/opencode"
+fi
+
+# Mount sandbox Qwen Code config
+if [ -d "$SANDBOX_CONFIG_DIR/.qwen" ]; then
+    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.qwen:/home/node/.qwen"
+    echo "Using sandbox config: .qwen"
 fi
 
 # Check for basic-memory directory (basic-memory MCP server)
