@@ -6,6 +6,14 @@ input=$(cat)
 # Extract information
 current_dir=$(echo "$input" | jq -r '.workspace.current_dir')
 model_name=$(echo "$input" | jq -r '.model.display_name')
+
+# Map model names to GLM display names
+case "$model_name" in
+    *Opus*) model_name="GLM-4.7" ;;
+    *Sonnet*) model_name="GLM-4.7" ;;
+    *Haiku*) model_name="GLM-4.5" ;;
+esac
+
 session_id=$(echo "$input" | jq -r '.session_id')
 transcript_path=$(echo "$input" | jq -r '.transcript_path')
 
