@@ -919,7 +919,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -e TERM="$TERM" \
             --init \
             "$IMAGE_NAME" \
-            bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; exec bash"
+            bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; if [ ! -d /workspace/.venv-linux ] && { [ -f /workspace/requirements.txt ] || [ -f /workspace/pyproject.toml ]; }; then echo 'Creating Python venv (.venv-linux)...'; python3 -m venv /workspace/.venv-linux; if [ -f /workspace/requirements.txt ]; then /workspace/.venv-linux/bin/pip install -q -r /workspace/requirements.txt; elif [ -f /workspace/pyproject.toml ]; then /workspace/.venv-linux/bin/pip install -q -e /workspace; fi; fi; if [ -f /workspace/.venv-linux/bin/activate ]; then source /workspace/.venv-linux/bin/activate; fi; exec bash"
     elif [ "$NON_INTERACTIVE" = true ]; then
         # Run non-interactive command with asdf support
         docker run -it --rm \
@@ -931,7 +931,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -e TERM="$TERM" \
             --init \
             "$IMAGE_NAME" \
-            bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; $*"
+            bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; if [ ! -d /workspace/.venv-linux ] && { [ -f /workspace/requirements.txt ] || [ -f /workspace/pyproject.toml ]; }; then echo 'Creating Python venv (.venv-linux)...'; python3 -m venv /workspace/.venv-linux; if [ -f /workspace/requirements.txt ]; then /workspace/.venv-linux/bin/pip install -q -r /workspace/requirements.txt; elif [ -f /workspace/pyproject.toml ]; then /workspace/.venv-linux/bin/pip install -q -e /workspace; fi; fi; if [ -f /workspace/.venv-linux/bin/activate ]; then source /workspace/.venv-linux/bin/activate; fi; $*"
     else
         # Run the container with current directory mounted as workspace
         docker run -it --rm \
@@ -943,7 +943,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -e TERM="$TERM" \
             --init \
             "$IMAGE_NAME" \
-            bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; if ! command -v node >/dev/null 2>&1; then echo 'No Node.js found, installing LTS...'; asdf plugin add nodejs 2>/dev/null || true; asdf install nodejs lts; asdf global nodejs lts; fi; claude-wrapper --dangerously-skip-permissions $*"
+            bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; if [ ! -d /workspace/.venv-linux ] && { [ -f /workspace/requirements.txt ] || [ -f /workspace/pyproject.toml ]; }; then echo 'Creating Python venv (.venv-linux)...'; python3 -m venv /workspace/.venv-linux; if [ -f /workspace/requirements.txt ]; then /workspace/.venv-linux/bin/pip install -q -r /workspace/requirements.txt; elif [ -f /workspace/pyproject.toml ]; then /workspace/.venv-linux/bin/pip install -q -e /workspace; fi; fi; if [ -f /workspace/.venv-linux/bin/activate ]; then source /workspace/.venv-linux/bin/activate; fi; if ! command -v node >/dev/null 2>&1; then echo 'No Node.js found, installing LTS...'; asdf plugin add nodejs 2>/dev/null || true; asdf install nodejs lts; asdf global nodejs lts; fi; claude-wrapper --dangerously-skip-permissions $*"
     fi
 else
     echo "Error: This script requires an interactive terminal (TTY)."

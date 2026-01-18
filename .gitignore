@@ -8,6 +8,9 @@
 
 # Test directories
 test-venv/
+
+# Python venv (Linux sandbox)
+.venv-linux/
 /CLAUDE.md
 .ai-cli.env
 .claude-glm-backup
