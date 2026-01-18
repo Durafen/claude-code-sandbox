@@ -1,4 +1,8 @@
 #!/bin/bash
+set -e
+
+# Error handler - show big error and exit
+trap 'echo ""; echo "═══════════════════════════════════════════════════════════"; echo "  ❌ ERROR: Command failed at line $LINENO"; echo "═══════════════════════════════════════════════════════════"; echo ""; exit 1' ERR
 
 # Sandboxed Claude Code CLI wrapper
 # Based on https://github.com/cwensel/claude-sandbox/blob/main/claudes
@@ -38,6 +42,25 @@ fi
 WORKSPACE_NAME=$(basename "$(pwd)" | tr -cd '[:alnum:]._-' | sed 's/^-//')
 WORKSPACE_NAME="${WORKSPACE_NAME:-workspace}"  # fallback if empty
 CONTAINER_WORKSPACE="/$WORKSPACE_NAME"
+
+# Helper: Generate venv setup bash snippet (DRY - used by all docker run commands)
+# Uses $CONTAINER_WORKSPACE env var passed to container for proper quoting
+generate_venv_setup() {
+    cat <<'VENV_EOF'
+if [ ! -d "$CONTAINER_WORKSPACE/.venv-linux" ] && { [ -f "$CONTAINER_WORKSPACE/requirements.txt" ] || [ -f "$CONTAINER_WORKSPACE/pyproject.toml" ]; }; then
+    echo 'Creating Python venv (.venv-linux)...'
+    python3 -m venv "$CONTAINER_WORKSPACE/.venv-linux"
+    if [ -f "$CONTAINER_WORKSPACE/requirements.txt" ]; then
+        "$CONTAINER_WORKSPACE/.venv-linux/bin/pip" install -q -r "$CONTAINER_WORKSPACE/requirements.txt"
+    elif [ -f "$CONTAINER_WORKSPACE/pyproject.toml" ]; then
+        "$CONTAINER_WORKSPACE/.venv-linux/bin/pip" install -q -e "$CONTAINER_WORKSPACE"
+    fi
+fi
+if [ -f "$CONTAINER_WORKSPACE/.venv-linux/bin/activate" ]; then
+    source "$CONTAINER_WORKSPACE/.venv-linux/bin/activate"
+fi
+VENV_EOF
+}
 
 # Parse command line options
 BUILD_IMAGE=false
@@ -880,9 +903,10 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
             -e TERM="$TERM" \
+            -e CONTAINER_WORKSPACE="$CONTAINER_WORKSPACE" \
             --init \
             "$IMAGE_NAME" \
-            bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; if [ ! -d $CONTAINER_WORKSPACE/.venv-linux ] && { [ -f $CONTAINER_WORKSPACE/requirements.txt ] || [ -f $CONTAINER_WORKSPACE/pyproject.toml ]; }; then echo 'Creating Python venv (.venv-linux)...'; python3 -m venv $CONTAINER_WORKSPACE/.venv-linux; if [ -f $CONTAINER_WORKSPACE/requirements.txt ]; then $CONTAINER_WORKSPACE/.venv-linux/bin/pip install -q -r $CONTAINER_WORKSPACE/requirements.txt; elif [ -f $CONTAINER_WORKSPACE/pyproject.toml ]; then $CONTAINER_WORKSPACE/.venv-linux/bin/pip install -q -e $CONTAINER_WORKSPACE; fi; fi; if [ -f $CONTAINER_WORKSPACE/.venv-linux/bin/activate ]; then source $CONTAINER_WORKSPACE/.venv-linux/bin/activate; fi; exec bash"
+            bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; $(generate_venv_setup); exec bash"
     elif [ "$NON_INTERACTIVE" = true ]; then
         # Run non-interactive command with asdf support
         docker run -it --rm \
@@ -893,9 +917,10 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
             -e TERM="$TERM" \
+            -e CONTAINER_WORKSPACE="$CONTAINER_WORKSPACE" \
             --init \
             "$IMAGE_NAME" \
-            bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; if [ ! -d $CONTAINER_WORKSPACE/.venv-linux ] && { [ -f $CONTAINER_WORKSPACE/requirements.txt ] || [ -f $CONTAINER_WORKSPACE/pyproject.toml ]; }; then echo 'Creating Python venv (.venv-linux)...'; python3 -m venv $CONTAINER_WORKSPACE/.venv-linux; if [ -f $CONTAINER_WORKSPACE/requirements.txt ]; then $CONTAINER_WORKSPACE/.venv-linux/bin/pip install -q -r $CONTAINER_WORKSPACE/requirements.txt; elif [ -f $CONTAINER_WORKSPACE/pyproject.toml ]; then $CONTAINER_WORKSPACE/.venv-linux/bin/pip install -q -e $CONTAINER_WORKSPACE; fi; fi; if [ -f $CONTAINER_WORKSPACE/.venv-linux/bin/activate ]; then source $CONTAINER_WORKSPACE/.venv-linux/bin/activate; fi; $*"
+            bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; $(generate_venv_setup); $*"
     else
         # Run the container with current directory mounted as workspace
         docker run -it --rm \
@@ -906,9 +931,10 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
             -e TERM="$TERM" \
+            -e CONTAINER_WORKSPACE="$CONTAINER_WORKSPACE" \
             --init \
             "$IMAGE_NAME" \
-            bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; if [ ! -d $CONTAINER_WORKSPACE/.venv-linux ] && { [ -f $CONTAINER_WORKSPACE/requirements.txt ] || [ -f $CONTAINER_WORKSPACE/pyproject.toml ]; }; then echo 'Creating Python venv (.venv-linux)...'; python3 -m venv $CONTAINER_WORKSPACE/.venv-linux; if [ -f $CONTAINER_WORKSPACE/requirements.txt ]; then $CONTAINER_WORKSPACE/.venv-linux/bin/pip install -q -r $CONTAINER_WORKSPACE/requirements.txt; elif [ -f $CONTAINER_WORKSPACE/pyproject.toml ]; then $CONTAINER_WORKSPACE/.venv-linux/bin/pip install -q -e $CONTAINER_WORKSPACE; fi; fi; if [ -f $CONTAINER_WORKSPACE/.venv-linux/bin/activate ]; then source $CONTAINER_WORKSPACE/.venv-linux/bin/activate; fi; if ! command -v node >/dev/null 2>&1; then echo 'No Node.js found, installing LTS...'; asdf plugin add nodejs 2>/dev/null || true; asdf install nodejs lts; asdf global nodejs lts; fi; claude-wrapper --dangerously-skip-permissions $*"
+            bash -c "export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:\$PATH\"; source ~/.asdf/asdf.sh 2>/dev/null || true; $(generate_venv_setup); if ! command -v node >/dev/null 2>&1; then echo 'No Node.js found, installing LTS...'; asdf plugin add nodejs 2>/dev/null || true; asdf install nodejs lts; asdf global nodejs lts; fi; claude-wrapper --dangerously-skip-permissions $*"
     fi
 else
     echo "Error: This script requires an interactive terminal (TTY)."

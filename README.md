@@ -50,6 +50,24 @@ maven 3.9.6" > .tool-versions
 - 🔧 **Auto-completion**: Bash and Zsh completion for commands and tool names
 - 🛡️ **Security**: Sandboxed execution prevents potential system modifications
 - 🔄 **Live Updates**: Your current working directory is mounted for real-time file access
+- 📁 **Dynamic Workspace Path**: Container path matches your host directory name (e.g., `my-project` → `/my-project`)
+
+## ⚠️ Breaking Change (v1.1.0+)
+
+**Container workspace path is now dynamic.** Previously, the container always mounted your project at `/workspace`. Now it uses your directory name (sanitized):
+
+| Host Directory | Container Path |
+|----------------|----------------|
+| `my-project` | `/my-project` |
+| `My Project` | `/MyProject` |
+| `@special#chars` | `/specialchars` |
+
+**Action required if you have:**
+- `.vscode/launch.json` or IDE configs with hardcoded `/workspace` paths
+- Environment variables referencing `/workspace`
+- Custom scripts using absolute paths inside the container
+
+**Fix:** Update paths to use `$CONTAINER_WORKSPACE` (available as env var inside container) or the new dynamic path.
 
 ## Prerequisites
 
@@ -471,11 +489,36 @@ The Docker container includes:
 - **Content Hashing**: Tracks configuration changes to avoid unnecessary rebuilds
 - **Layer Caching**: Docker layer caching minimizes build times for unchanged components
 
+### Linux Cache Isolation
+
+Build caches are stored in `~/.claude-sandbox-cache/` on the host, isolated from macOS caches. This prevents cross-platform compilation issues:
+
+| Cache | Purpose |
+|-------|---------|
+| `.cargo` | Rust compiled deps |
+| `go` | Go binaries |
+| `.bun` | Bun native binaries |
+| `.cache` | pip wheels, yarn, pnpm, go-build, deno |
+| `.npm` | npm cache |
+| `.m2` / `.gradle` | Maven/Gradle JARs |
+| `.gem` / `.bundle` | Ruby native extensions |
+| `.nuget` | NuGet packages |
+
 ### Python Environment Details
 - **System Python**: Python 3 installed via Debian package manager at `/usr/bin/python3` with symlink at `/usr/local/bin/python`
 - **pip**: System pip3 available via Debian packages
 - **uv**: Modern Python package manager installed per-user in `/home/node/.local/bin/uv`
 - **Flexibility**: Users can use system Python directly or leverage uv for advanced package management
+
+### Auto Python Virtual Environment
+
+When your project has `requirements.txt` or `pyproject.toml`, the sandbox automatically:
+
+1. Creates `.venv-linux/` (Linux-specific venv, separate from host's `.venv/`)
+2. Installs dependencies from `requirements.txt` or `pyproject.toml`
+3. Activates the venv for your session
+
+This happens on first run and is cached for subsequent sessions. The `.venv-linux/` directory is gitignored by default.
 
 ### Container Architecture
 - **User**: Runs as non-root `node` user (UID 1000) for security
