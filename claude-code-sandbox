@@ -746,74 +746,67 @@ if [ -d "$SANDBOX_CONFIG_DIR/.anthropic" ]; then
     echo "Using sandbox config: .anthropic"
 fi
 
-# Check for .m2 directory (Maven)
-if [ -d "$HOME/.m2" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.m2:/home/node/.m2"
-    echo "Mounting Maven config from $HOME/.m2"
-fi
+# Linux-specific cache directory (isolates platform-specific compiled artifacts)
+LINUX_CACHE_DIR="$HOME/.claude-sandbox-cache"
+mkdir -p "$LINUX_CACHE_DIR"
 
-# Check for .gradle directory (Gradle)
-if [ -d "$HOME/.gradle" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.gradle:/home/node/.gradle"
-    echo "Mounting Gradle config from $HOME/.gradle"
-fi
+# Mount Linux-specific caches (auto-created, isolated from macOS host caches)
+# These contain platform-specific compiled artifacts that don't cross-compile well
 
-# Check for .npm directory (Node.js)
-if [ -d "$HOME/.npm" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.npm:/home/node/.npm"
-    echo "Mounting npm cache from $HOME/.npm"
-fi
+# .cargo - Rust compiled deps are platform-specific
+mkdir -p "$LINUX_CACHE_DIR/.cargo"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.cargo:/home/node/.cargo"
+echo "Using Linux cache: .cargo"
 
-# Check for .cache directory (covers pip, yarn, pnpm, go-build, deno, composer, etc.)
-if [ -d "$HOME/.cache" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.cache:/home/node/.cache"
-    echo "Mounting cache directory from $HOME/.cache"
-fi
+# go - compiled Go binaries are platform-specific
+mkdir -p "$LINUX_CACHE_DIR/go"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/go:/home/node/go"
+echo "Using Linux cache: go"
 
-# Check for .pnpm-store directory (pnpm global store)
-if [ -d "$HOME/.pnpm-store" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.pnpm-store:/home/node/.pnpm-store"
-    echo "Mounting pnpm store from $HOME/.pnpm-store"
-fi
+# .bun - has native binaries
+mkdir -p "$LINUX_CACHE_DIR/.bun"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.bun:/home/node/.bun"
+echo "Using Linux cache: .bun"
 
-# Check for .cargo directory (Rust)
-if [ -d "$HOME/.cargo" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.cargo:/home/node/.cargo"
-    echo "Mounting Cargo config from $HOME/.cargo"
-fi
+# .cache - pip wheels, yarn, pnpm, go-build, deno, composer (mixed, some native)
+mkdir -p "$LINUX_CACHE_DIR/.cache"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.cache:/home/node/.cache"
+echo "Using Linux cache: .cache"
 
-# Check for go directory (Go modules)
-if [ -d "$HOME/go" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/go:/home/node/go"
-    echo "Mounting Go workspace from $HOME/go"
-fi
+# .pnpm-store - can have native deps
+mkdir -p "$LINUX_CACHE_DIR/.pnpm-store"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.pnpm-store:/home/node/.pnpm-store"
+echo "Using Linux cache: .pnpm-store"
 
+# .gem - Ruby native extensions are platform-specific
+mkdir -p "$LINUX_CACHE_DIR/.gem"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.gem:/home/node/.gem"
+echo "Using Linux cache: .gem"
 
-# Check for .gem directory (Ruby gems)
-if [ -d "$HOME/.gem" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.gem:/home/node/.gem"
-    echo "Mounting Ruby gems from $HOME/.gem"
-fi
+# .bundle - Ruby bundler native deps
+mkdir -p "$LINUX_CACHE_DIR/.bundle"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.bundle:/home/node/.bundle"
+echo "Using Linux cache: .bundle"
 
-# Check for .bundle directory (Ruby bundler)
-if [ -d "$HOME/.bundle" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.bundle:/home/node/.bundle"
-    echo "Mounting Ruby bundle config from $HOME/.bundle"
-fi
+# .m2 - Maven JARs (isolated for cleaner separation)
+mkdir -p "$LINUX_CACHE_DIR/.m2"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.m2:/home/node/.m2"
+echo "Using Linux cache: .m2"
 
+# .gradle - Gradle cache
+mkdir -p "$LINUX_CACHE_DIR/.gradle"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.gradle:/home/node/.gradle"
+echo "Using Linux cache: .gradle"
 
-# Check for .nuget directory (NuGet packages)
-if [ -d "$HOME/.nuget" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.nuget:/home/node/.nuget"
-    echo "Mounting NuGet packages from $HOME/.nuget"
-fi
+# .npm - npm cache
+mkdir -p "$LINUX_CACHE_DIR/.npm"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.npm:/home/node/.npm"
+echo "Using Linux cache: .npm"
 
-
-# Check for .bun directory (Bun)
-if [ -d "$HOME/.bun" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/.bun:/home/node/.bun"
-    echo "Mounting Bun config from $HOME/.bun"
-fi
+# .nuget - NuGet packages
+mkdir -p "$LINUX_CACHE_DIR/.nuget"
+CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.nuget:/home/node/.nuget"
+echo "Using Linux cache: .nuget"
 
 # Mount sandbox .claude.json (use GLM-specific version in GLM mode)
 if [[ "$GLM_MODE" == "true" ]] && [ -f "$SANDBOX_CONFIG_DIR/.claude-glm.json" ]; then
