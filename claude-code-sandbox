@@ -716,7 +716,7 @@ fi
 
 
 # Check for Claude configuration directories
-CLAUDE_CONFIG=""
+CLAUDE_CONFIG_ARGS=()
 
 # Auto-sync sandbox config on first run only (check for .initialized marker)
 if [ ! -f "$SANDBOX_CONFIG_DIR/.initialized" ]; then
@@ -732,146 +732,110 @@ fi
 # Mount sandbox configs (persistent, protects host files)
 # Use CLAUDE_CONFIG_SUBDIR to support both Claude and GLM modes
 if [ -d "$SANDBOX_CONFIG_DIR/$CLAUDE_CONFIG_SUBDIR" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/$CLAUDE_CONFIG_SUBDIR:/home/node/.claude"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/$CLAUDE_CONFIG_SUBDIR:/home/node/.claude")
     echo "Using Claude config: $SANDBOX_CONFIG_DIR/$CLAUDE_CONFIG_SUBDIR"
 fi
 
 if [ -d "$SANDBOX_CONFIG_DIR/.config/claude" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.config/claude:/home/node/.config/claude"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.config/claude:/home/node/.config/claude")
     echo "Using sandbox config: .config/claude"
 fi
 
 if [ -d "$SANDBOX_CONFIG_DIR/.anthropic" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.anthropic:/home/node/.anthropic"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.anthropic:/home/node/.anthropic")
     echo "Using sandbox config: .anthropic"
 fi
 
 # Linux-specific cache directory (isolates platform-specific compiled artifacts)
 LINUX_CACHE_DIR="$HOME/.claude-sandbox-cache"
-mkdir -p "$LINUX_CACHE_DIR"
+mkdir -p "$LINUX_CACHE_DIR" || { echo "Error: Failed to create cache directory $LINUX_CACHE_DIR" >&2; exit 1; }
+
+# Helper: mount a Linux-isolated cache directory
+add_linux_cache() {
+    local name="$1"
+    mkdir -p "$LINUX_CACHE_DIR/$name" || { echo "Error: Failed to create cache directory $LINUX_CACHE_DIR/$name" >&2; exit 1; }
+    CLAUDE_CONFIG_ARGS+=(-v "$LINUX_CACHE_DIR/$name:/home/node/$name")
+    echo "Using Linux cache: $name"
+}
 
 # Mount Linux-specific caches (auto-created, isolated from macOS host caches)
 # These contain platform-specific compiled artifacts that don't cross-compile well
-
-# .cargo - Rust compiled deps are platform-specific
-mkdir -p "$LINUX_CACHE_DIR/.cargo"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.cargo:/home/node/.cargo"
-echo "Using Linux cache: .cargo"
-
-# go - compiled Go binaries are platform-specific
-mkdir -p "$LINUX_CACHE_DIR/go"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/go:/home/node/go"
-echo "Using Linux cache: go"
-
-# .bun - has native binaries
-mkdir -p "$LINUX_CACHE_DIR/.bun"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.bun:/home/node/.bun"
-echo "Using Linux cache: .bun"
-
-# .cache - pip wheels, yarn, pnpm, go-build, deno, composer (mixed, some native)
-mkdir -p "$LINUX_CACHE_DIR/.cache"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.cache:/home/node/.cache"
-echo "Using Linux cache: .cache"
-
-# .pnpm-store - can have native deps
-mkdir -p "$LINUX_CACHE_DIR/.pnpm-store"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.pnpm-store:/home/node/.pnpm-store"
-echo "Using Linux cache: .pnpm-store"
-
-# .gem - Ruby native extensions are platform-specific
-mkdir -p "$LINUX_CACHE_DIR/.gem"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.gem:/home/node/.gem"
-echo "Using Linux cache: .gem"
-
-# .bundle - Ruby bundler native deps
-mkdir -p "$LINUX_CACHE_DIR/.bundle"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.bundle:/home/node/.bundle"
-echo "Using Linux cache: .bundle"
-
-# .m2 - Maven JARs (isolated for cleaner separation)
-mkdir -p "$LINUX_CACHE_DIR/.m2"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.m2:/home/node/.m2"
-echo "Using Linux cache: .m2"
-
-# .gradle - Gradle cache
-mkdir -p "$LINUX_CACHE_DIR/.gradle"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.gradle:/home/node/.gradle"
-echo "Using Linux cache: .gradle"
-
-# .npm - npm cache
-mkdir -p "$LINUX_CACHE_DIR/.npm"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.npm:/home/node/.npm"
-echo "Using Linux cache: .npm"
-
-# .nuget - NuGet packages
-mkdir -p "$LINUX_CACHE_DIR/.nuget"
-CLAUDE_CONFIG="$CLAUDE_CONFIG -v $LINUX_CACHE_DIR/.nuget:/home/node/.nuget"
-echo "Using Linux cache: .nuget"
+add_linux_cache .cargo      # Rust compiled deps
+add_linux_cache go          # Go binaries
+add_linux_cache .bun        # Bun native binaries
+add_linux_cache .cache      # pip wheels, yarn, pnpm, go-build, deno, composer
+add_linux_cache .pnpm-store # pnpm native deps
+add_linux_cache .gem        # Ruby native extensions
+add_linux_cache .bundle     # Ruby bundler native deps
+add_linux_cache .m2         # Maven JARs
+add_linux_cache .gradle     # Gradle cache
+add_linux_cache .npm        # npm cache
+add_linux_cache .nuget      # NuGet packages
 
 # Mount sandbox .claude.json (use GLM-specific version in GLM mode)
 if [[ "$GLM_MODE" == "true" ]] && [ -f "$SANDBOX_CONFIG_DIR/.claude-glm.json" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.claude-glm.json:/home/node/.claude.json"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.claude-glm.json:/home/node/.claude.json")
     echo "Using GLM config: .claude-glm.json"
 elif [ -f "$SANDBOX_CONFIG_DIR/.claude.json" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.claude.json:/home/node/.claude.json"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.claude.json:/home/node/.claude.json")
     echo "Using sandbox config: .claude.json"
 fi
 
 # Mount sandbox opencode config
 if [ -d "$SANDBOX_CONFIG_DIR/.config/opencode" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.config/opencode:/home/node/.config/opencode"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.config/opencode:/home/node/.config/opencode")
     echo "Using sandbox config: .config/opencode"
 fi
 
 # Mount sandbox opencode data
 if [ -d "$SANDBOX_CONFIG_DIR/.local/share/opencode" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.local/share/opencode:/home/node/.local/share/opencode"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.local/share/opencode:/home/node/.local/share/opencode")
     echo "Using sandbox config: .local/share/opencode"
 fi
 
 # Mount sandbox Qwen Code config
 if [ -d "$SANDBOX_CONFIG_DIR/.qwen" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.qwen:/home/node/.qwen"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.qwen:/home/node/.qwen")
     echo "Using sandbox config: .qwen"
 fi
 
 # Mount sandbox Codex config (OpenAI Codex CLI)
 if [ -d "$SANDBOX_CONFIG_DIR/.codex" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.codex:/home/node/.codex"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.codex:/home/node/.codex")
     echo "Using sandbox config: .codex"
 fi
 
 # Mount sandbox Gemini config (Google Gemini CLI)
 if [ -d "$SANDBOX_CONFIG_DIR/.gemini" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.gemini:/home/node/.gemini"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.gemini:/home/node/.gemini")
     echo "Using sandbox config: .gemini"
 fi
 
 # Mount AI-CLI config files (not the whole dir - repo is cloned there)
 if [ -f "$SANDBOX_CONFIG_DIR/.ai-cli/config.json" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.ai-cli/config.json:/home/node/.ai-cli/config.json"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.ai-cli/config.json:/home/node/.ai-cli/config.json")
     echo "Using sandbox config: .ai-cli/config.json"
 fi
 if [ -f "$SANDBOX_CONFIG_DIR/.ai-cli/.env" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.ai-cli/.env:/home/node/.ai-cli/.env"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.ai-cli/.env:/home/node/.ai-cli/.env")
     echo "Using sandbox config: .ai-cli/.env"
 fi
 
 # Mount sandbox opencode cache (overrides host ~/.cache/opencode)
 if [ -d "$SANDBOX_CONFIG_DIR/.cache/opencode" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.cache/opencode:/home/node/.cache/opencode"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.cache/opencode:/home/node/.cache/opencode")
     echo "Using sandbox config: .cache/opencode"
 fi
 
 # Mount sandbox opencode state (model selection, favorites, history)
 if [ -d "$SANDBOX_CONFIG_DIR/.local/state/opencode" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $SANDBOX_CONFIG_DIR/.local/state/opencode:/home/node/.local/state/opencode"
+    CLAUDE_CONFIG_ARGS+=(-v "$SANDBOX_CONFIG_DIR/.local/state/opencode:/home/node/.local/state/opencode")
     echo "Using sandbox config: .local/state/opencode"
 fi
 
 # Check for basic-memory directory (basic-memory MCP server)
 if [ -d "$HOME/basic-memory" ]; then
-    CLAUDE_CONFIG="$CLAUDE_CONFIG -v $HOME/basic-memory:/home/node/basic-memory"
+    CLAUDE_CONFIG_ARGS+=(-v "$HOME/basic-memory:/home/node/basic-memory")
     echo "Mounting basic-memory MCP server from $HOME/basic-memory"
 fi
 
@@ -895,7 +859,7 @@ if [ "$DOCKER_ENABLED" = true ]; then
     fi
 fi
 
-if [ -z "$CLAUDE_CONFIG" ]; then
+if [ ${#CLAUDE_CONFIG_ARGS[@]} -eq 0 ]; then
     echo "Warning: No configuration directories found"
 fi
 
@@ -907,7 +871,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             --user node \
             -v "$(pwd):/workspace" \
             "${BEADS_MOUNT_ARGS[@]}" \
-            $CLAUDE_CONFIG \
+            "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
             -e TERM="$TERM" \
             --init \
@@ -919,7 +883,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             --user node \
             -v "$(pwd):/workspace" \
             "${BEADS_MOUNT_ARGS[@]}" \
-            $CLAUDE_CONFIG \
+            "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
             -e TERM="$TERM" \
             --init \
@@ -931,7 +895,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             --user node \
             -v "$(pwd):/workspace" \
             "${BEADS_MOUNT_ARGS[@]}" \
-            $CLAUDE_CONFIG \
+            "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
             -e TERM="$TERM" \
             --init \
