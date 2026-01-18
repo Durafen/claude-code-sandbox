@@ -883,10 +883,10 @@ if [ -d "$HOME/basic-memory" ]; then
 fi
 
 # Check for .beads directory (beads task management)
-# Note: handled separately via BEADS_MOUNT to support paths with spaces
-BEADS_MOUNT=""
+# Use array to properly handle paths with spaces
+BEADS_MOUNT_ARGS=()
 if [ -d "$(pwd)/.beads" ]; then
-    BEADS_MOUNT="$(pwd)/.beads:/workspace/.beads"
+    BEADS_MOUNT_ARGS=(-v "$(pwd)/.beads:/workspace/.beads")
     echo "Mounting beads task directory from $(pwd)/.beads"
 fi
 
@@ -913,10 +913,9 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
         docker run -it --rm \
             --user node \
             -v "$(pwd):/workspace" \
-            ${BEADS_MOUNT:+-v "$BEADS_MOUNT"} \
+            "${BEADS_MOUNT_ARGS[@]}" \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
-             \
             -e TERM="$TERM" \
             --init \
             "$IMAGE_NAME" \
@@ -926,7 +925,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
         docker run -it --rm \
             --user node \
             -v "$(pwd):/workspace" \
-            ${BEADS_MOUNT:+-v "$BEADS_MOUNT"} \
+            "${BEADS_MOUNT_ARGS[@]}" \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
             -e TERM="$TERM" \
@@ -938,10 +937,9 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
         docker run -it --rm \
             --user node \
             -v "$(pwd):/workspace" \
-            ${BEADS_MOUNT:+-v "$BEADS_MOUNT"} \
+            "${BEADS_MOUNT_ARGS[@]}" \
             $CLAUDE_CONFIG \
             $DOCKER_MOUNT \
-             \
             -e TERM="$TERM" \
             --init \
             "$IMAGE_NAME" \
