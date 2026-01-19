@@ -67,9 +67,10 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
 # Create python symlink for consistency
 RUN ln -sf /usr/bin/python3 /usr/local/bin/python
 
-# Create node user and group
+# Create node user and group with passwordless sudo
 RUN groupadd -r node -g 1000 && \
-    useradd -r -g node -u 1000 -m -d /home/node -s /bin/bash node
+    useradd -r -g node -u 1000 -m -d /home/node -s /bin/bash node && \
+    echo 'node ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 # Install asdf for the node user
 RUN gosu 1000:1000 sh -c "git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.14.1"
@@ -83,6 +84,16 @@ RUN gosu 1000:1000 sh -c "npm config set prefix ~/.npm-global && npm install -g 
 
 # Add npm-global to PATH
 RUN gosu 1000:1000 sh -c "echo 'export PATH=\"\$HOME/.npm-global/bin:\$PATH\"' >> ~/.bashrc"
+
+# Install agent-browser with Playwright for browser automation
+# Install system deps for Playwright first (needs root)
+RUN npx playwright install-deps chromium
+
+# Install agent-browser and Playwright browser as node user
+# Note: build:native skipped - requires full git repo with Rust source, npm package works without it
+RUN gosu 1000:1000 sh -c "npm config set prefix ~/.npm-global && \
+    npm install -g agent-browser && \
+    npx playwright install chromium"
 
 # Note: Base image only contains asdf setup, tools are installed in workspace stage
 
