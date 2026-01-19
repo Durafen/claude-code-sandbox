@@ -41,6 +41,7 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     libffi-dev \
     libsqlite3-dev \
+    sqlite3 \
     libbz2-dev \
     liblzma-dev \
     linux-libc-dev \

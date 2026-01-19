@@ -799,6 +799,7 @@ add_linux_cache .m2         # Maven JARs
 add_linux_cache .gradle     # Gradle cache
 add_linux_cache .npm        # npm cache
 add_linux_cache .nuget      # NuGet packages
+add_linux_cache .local/share/uv  # uv/uvx tools and cache
 
 # Mount sandbox .claude.json (use GLM-specific version in GLM mode)
 if [[ "$GLM_MODE" == "true" ]] && [ -f "$SANDBOX_CONFIG_DIR/.claude-glm.json" ]; then

@@ -28,6 +28,16 @@
       "headers": {
         "Authorization": "Bearer ${ANTHROPIC_AUTH_TOKEN}"
       }
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "/home/node/.local/bin/uvx",
+      "args": ["mcp-server-fetch"]
+    },
+    "duckduckgo": {
+      "type": "stdio",
+      "command": "/home/node/.local/bin/uvx",
+      "args": ["duckduckgo-mcp", "serve"]
     }
   }
 }
