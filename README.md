@@ -366,7 +366,7 @@ The cleanup commands help manage disk space by removing workspace images that ha
 Work on multiple branches simultaneously using git worktrees:
 
 ```bash
-# Create/use a worktree for a branch (auto-generates .worktrees/feat-test/)
+# Create/use a worktree for a branch (auto-generates ../crm-feat-test if in 'crm' dir)
 ./claude-code-sandbox -w feat/test
 
 # Use an existing directory as worktree
@@ -385,8 +385,9 @@ Work on multiple branches simultaneously using git worktrees:
 - `-W` / `--cleanup-worktree` - Remove worktree when session ends
 
 **How it works:**
-- Branch names with slashes are converted to dashes for the path (e.g., `feat/test` → `.worktrees/feat-test`)
-- Checks both local and remote branches; errors if branch doesn't exist (create it first with `git branch <name>`)
+- Auto-generates path in parent directory: `../<current-dir>-<branch>` (e.g., in `crm`: `feat/test` → `../crm-feat-test`)
+- Auto-creates branch from HEAD if it doesn't exist
+- Copies `.env*` and `*.db` files to new worktrees automatically
 - Absolute paths (`/path/to/worktree`) and relative paths (`../sibling`) are used as-is
 
 ### Workspace-Specific Images

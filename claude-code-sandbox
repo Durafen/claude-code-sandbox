@@ -41,11 +41,6 @@ else
     echo "Created new workspace image: $IMAGE_NAME"
 fi
 
-# Dynamic workspace name (sanitized for container path safety)
-WORKSPACE_NAME=$(basename "$(pwd)" | tr -cd '[:alnum:]._-' | sed 's/^-//')
-WORKSPACE_NAME="${WORKSPACE_NAME:-workspace}"  # fallback if empty
-CONTAINER_WORKSPACE="/$WORKSPACE_NAME"
-
 # Helper: Generate venv setup bash snippet (DRY - used by all docker run commands)
 # Uses $CONTAINER_WORKSPACE env var passed to container for proper quoting
 generate_venv_setup() {
@@ -203,6 +198,7 @@ while getopts "bsndcgw:W-:" opt; do
                     echo "        with slashes converted to dashes (e.g., in 'crm': feat/test -> ../crm-feat-test)."
                     echo "      - Supports both absolute and relative paths."
                     echo "      - Auto-creates branch from HEAD if it doesn't exist."
+                    echo "      - Copies .env* and *.db files to new worktrees automatically."
                     echo "      - Works with all modes: shell (-s), claude (-c), non-interactive (-n)."
                     echo ""
                     echo "  -W, --cleanup-worktree"
@@ -686,6 +682,34 @@ resolve_and_create_worktree() {
                 exit 1
             fi
         fi
+
+        # Copy untracked files (.env*, *.db) from source to NEW worktree only
+        local source_dir="$(pwd)"
+        local abs_target="$(cd "$target_path" && pwd)"
+
+        # Copy .env* files
+        for f in "$source_dir"/.env*; do
+            if [[ -f "$f" ]]; then
+                if cp "$f" "$abs_target/"; then
+                    echo "Copied $(basename "$f") to worktree" >&2
+                else
+                    echo "Error: Failed to copy $(basename "$f") to worktree" >&2
+                    exit 1
+                fi
+            fi
+        done
+
+        # Copy *.db files (top-level only)
+        for f in "$source_dir"/*.db; do
+            if [[ -f "$f" ]]; then
+                if cp "$f" "$abs_target/"; then
+                    echo "Copied $(basename "$f") to worktree" >&2
+                else
+                    echo "Error: Failed to copy $(basename "$f") to worktree" >&2
+                    exit 1
+                fi
+            fi
+        done
     fi
 
     # Return the absolute path
@@ -748,6 +772,12 @@ if [[ -n "$WORKTREE_BRANCH" ]]; then
     echo "Using worktree: $WORKTREE_PATH"
     cd "$WORKTREE_PATH" || exit 1
 fi
+
+# Dynamic workspace name (sanitized for container path safety)
+# Must be after worktree cd to get correct directory name
+WORKSPACE_NAME=$(basename "$(pwd)" | tr -cd '[:alnum:]._-' | sed 's/^-//')
+WORKSPACE_NAME="${WORKSPACE_NAME:-workspace}"  # fallback if empty
+CONTAINER_WORKSPACE="/$WORKSPACE_NAME"
 
 # Handle remove mode
 if [[ "$REMOVE_IMAGE" == true ]]; then
@@ -1056,6 +1086,23 @@ if [ -d "$(pwd)/.beads" ]; then
     echo "Mounting beads task directory from $(pwd)/.beads"
 fi
 
+# Handle git worktree: mount main repo's .git directory
+# Worktrees have a .git FILE (not dir) pointing to main repo
+# Example: gitdir: /path/to/repo/.git/worktrees/branch-name
+#          → dirname twice → /path/to/repo/.git
+GIT_WORKTREE_ARGS=()
+if [ -f "$(pwd)/.git" ]; then
+    GITDIR_PATH=$(sed -n 's/^gitdir: //p' "$(pwd)/.git")
+    if [ -n "$GITDIR_PATH" ]; then
+        # .git/worktrees/<name> → .git/worktrees → .git
+        MAIN_GIT_DIR=$(dirname "$(dirname "$GITDIR_PATH")")
+        if [ -d "$MAIN_GIT_DIR" ]; then
+            GIT_WORKTREE_ARGS=(-v "$MAIN_GIT_DIR:$MAIN_GIT_DIR")
+            echo "Mounting main repo .git for worktree: $MAIN_GIT_DIR"
+        fi
+    fi
+fi
+
 # Add Docker socket mounting if Docker flag is enabled
 DOCKER_MOUNT=""
 if [ "$DOCKER_ENABLED" = true ]; then
@@ -1087,6 +1134,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -v "$(pwd):$CONTAINER_WORKSPACE" \
             -w "$CONTAINER_WORKSPACE" \
             "${BEADS_MOUNT_ARGS[@]}" \
+            "${GIT_WORKTREE_ARGS[@]}" \
             "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
             -e TERM="$TERM" \
@@ -1101,6 +1149,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -v "$(pwd):$CONTAINER_WORKSPACE" \
             -w "$CONTAINER_WORKSPACE" \
             "${BEADS_MOUNT_ARGS[@]}" \
+            "${GIT_WORKTREE_ARGS[@]}" \
             "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
             -e TERM="$TERM" \
@@ -1115,6 +1164,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -v "$(pwd):$CONTAINER_WORKSPACE" \
             -w "$CONTAINER_WORKSPACE" \
             "${BEADS_MOUNT_ARGS[@]}" \
+            "${GIT_WORKTREE_ARGS[@]}" \
             "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
             -e TERM="$TERM" \
