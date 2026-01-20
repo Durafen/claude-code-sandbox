@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Multi-stage build for shared base layers
 # Stage 1: Base image with common tools (shared across all workspaces)
 FROM debian:bookworm-slim AS base

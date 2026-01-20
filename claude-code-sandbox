@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Enable BuildKit for faster parallel builds and better caching
+export DOCKER_BUILDKIT=1
+
 # Error handler - show big error and exit
 trap 'echo ""; echo "═══════════════════════════════════════════════════════════"; echo "  ❌ ERROR: Command failed at line $LINENO"; echo "═══════════════════════════════════════════════════════════"; echo ""; exit 1' ERR
 
@@ -476,12 +479,14 @@ sync_sandbox_config() {
         fi
     fi
 
-    # Sync .qwen (Qwen Code)
+    # Sync .qwen (Qwen Code) - always sync newer files (OAuth tokens refresh)
     if [ -d "$HOME/.qwen" ]; then
         if [ "$force" = true ] || [ ! -d "$SANDBOX_CONFIG_DIR/.qwen" ]; then
             echo "Syncing ~/.qwen ..."
             rm -rf "$SANDBOX_CONFIG_DIR/.qwen"
             cp -r "$HOME/.qwen" "$SANDBOX_CONFIG_DIR/.qwen"
+        else
+            rsync -a --update "$HOME/.qwen/" "$SANDBOX_CONFIG_DIR/.qwen/"
         fi
     fi
 
