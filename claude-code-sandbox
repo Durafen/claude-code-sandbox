@@ -199,10 +199,10 @@ while getopts "bsndcgw:W-:" opt; do
                     echo "Worktree Support:"
                     echo "  -w BRANCH, --worktree-branch=BRANCH"
                     echo "      Creates or uses a git worktree for the specified branch."
-                    echo "      - Auto-generates path: .worktrees/<branch-name> with slashes"
-                    echo "        converted to dashes (e.g., feat/test -> .worktrees/feat-test)."
+                    echo "      - Auto-generates path: ../<current-dir>-<branch> (parent directory)"
+                    echo "        with slashes converted to dashes (e.g., in 'crm': feat/test -> ../crm-feat-test)."
                     echo "      - Supports both absolute and relative paths."
-                    echo "      - Falls back to current HEAD if the specified branch doesn't exist."
+                    echo "      - Auto-creates branch from HEAD if it doesn't exist."
                     echo "      - Works with all modes: shell (-s), claude (-c), non-interactive (-n)."
                     echo ""
                     echo "  -W, --cleanup-worktree"
@@ -222,9 +222,9 @@ while getopts "bsndcgw:W-:" opt; do
                     echo "  $0 --cleanup                  # Remove images older than 7 days"
                     echo "  $0 --cleanup --older-than=3d  # Remove images older than 3 days"
                     echo "  $0 --cleanup --dry-run        # Preview cleanup without removing"
-                    echo "  $0 -w feat/test -c            # Create worktree for 'feat/test' branch"
-                    echo "  $0 -w ../crm2 -c              # Use existing relative path as worktree"
-                    echo "  $0 -w feat/test -W -c         # Create worktree, cleanup on exit"
+                    echo "  $0 -w feat/test              # Create worktree at ../crm-feat-test (if in 'crm' dir)"
+                    echo "  $0 -w ../crm2                 # Use existing relative path as worktree"
+                    echo "  $0 -w feat/test -W            # Create worktree, cleanup on exit"
                     echo ""
                     echo "Auto-completion:"
                     echo "  Bash: source ./completions/claude-code-sandbox"
@@ -240,9 +240,9 @@ while getopts "bsndcgw:W-:" opt; do
                     echo "  $0 --build --install='python@3.12.8,golang@1.21.5,maven@3.9.6'"
                     echo "  $0 --build --install='java@adoptopenjdk-17.0.2+8,terraform@1.5.7'"
                     echo "  $0 --build --install='nodejs@20.11.0,rust@1.75.0'"
-                    echo "  $0 -w feat/test -c"
-                    echo "  $0 -w ../crm2 -c"
-                    echo "  $0 -w feat/test -W -c"
+                    echo "  $0 -w feat/test"
+                    echo "  $0 -w ../crm2"
+                    echo "  $0 -w feat/test -W"
                     echo "Use --help for more information"
                     exit 1
                     ;;
@@ -647,9 +647,10 @@ resolve_and_create_worktree() {
     if [[ "$branch_or_path" == /* ]] || [[ "$branch_or_path" == ../* ]]; then
         target_path="$branch_or_path"
     else
-        # Auto-generate path: .worktrees/${branch//\//-}
+        # Auto-generate path: ../<current-dir>-<branch> (parent directory, prefixed)
         local safe_branch="${branch_or_path//\//-}"
-        target_path=".worktrees/$safe_branch"
+        local current_dir=$(basename "$(pwd)")
+        target_path="../${current_dir}-${safe_branch}"
     fi
 
     # Worktree Creation Logic
@@ -678,10 +679,12 @@ resolve_and_create_worktree() {
                 exit 1
             fi
         else
-            # Branch doesn't exist - error out
-            echo "Error: Branch '$branch_or_path' not found locally or in origin." >&2
-            echo "Create it first: git branch $branch_or_path" >&2
-            exit 1
+            # Branch doesn't exist - create it from HEAD
+            echo "Creating new branch '$branch_or_path' from HEAD..." >&2
+            if ! git worktree add -b "$branch_or_path" "$target_path" HEAD >&2; then
+                echo "Error: Failed to create worktree at $target_path with new branch $branch_or_path" >&2
+                exit 1
+            fi
         fi
     fi
 
