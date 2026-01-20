@@ -361,6 +361,34 @@ claude-code-sandbox --cleanup --dry-run
 
 The cleanup commands help manage disk space by removing workspace images that haven't been used recently. Each workspace maintains its own Docker image, so cleanup is important for long-term disk usage management.
 
+### Git Worktree Support
+
+Work on multiple branches simultaneously using git worktrees:
+
+```bash
+# Create/use a worktree for a branch (auto-generates .worktrees/feat-test/)
+./claude-code-sandbox -w feat/test
+
+# Use an existing directory as worktree
+./claude-code-sandbox -w ../my-feature-branch
+
+# Auto-cleanup worktree when session ends
+./claude-code-sandbox -w feat/test -W
+
+# Combine with other flags
+./claude-code-sandbox -w feat/test -s   # Shell mode in worktree
+./claude-code-sandbox -w feat/test -W   # With auto-cleanup
+```
+
+**Flags:**
+- `-w BRANCH` / `--worktree-branch=BRANCH` - Create or use worktree
+- `-W` / `--cleanup-worktree` - Remove worktree when session ends
+
+**How it works:**
+- Branch names with slashes are converted to dashes for the path (e.g., `feat/test` → `.worktrees/feat-test`)
+- Checks both local and remote branches; errors if branch doesn't exist (create it first with `git branch <name>`)
+- Absolute paths (`/path/to/worktree`) and relative paths (`../sibling`) are used as-is
+
 ### Workspace-Specific Images
 
 Each workspace (directory) automatically gets its own Docker image for complete isolation:

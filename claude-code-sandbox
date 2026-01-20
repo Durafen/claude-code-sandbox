@@ -79,8 +79,10 @@ REMOVE_IMAGE=false
 SYNC_CONFIG=false
 CLAUDE_MODE=true
 GLM_MODE=false
+WORKTREE_BRANCH=""
+CLEANUP_WORKTREE=false
 
-while getopts "bsndcg-:" opt; do
+while getopts "bsndcgw:W-:" opt; do
     case $opt in
         b)
             BUILD_IMAGE=true
@@ -102,6 +104,16 @@ while getopts "bsndcg-:" opt; do
             GLM_MODE=true
             CLAUDE_MODE=true
             SHELL_MODE=false
+            ;;
+        w)
+            WORKTREE_BRANCH="$OPTARG"
+            if [ -z "$WORKTREE_BRANCH" ]; then
+                echo "Error: -w requires a branch name" >&2
+                exit 1
+            fi
+            ;;
+        W)
+            CLEANUP_WORKTREE=true
             ;;
         -)
             case "${OPTARG}" in
@@ -150,6 +162,16 @@ while getopts "bsndcg-:" opt; do
                 remove)
                     REMOVE_IMAGE=true
                     ;;
+                worktree-branch=*)
+                    WORKTREE_BRANCH="${OPTARG#*=}"
+                    if [ -z "$WORKTREE_BRANCH" ]; then
+                        echo "Error: --worktree-branch requires a branch name" >&2
+                        exit 1
+                    fi
+                    ;;
+                cleanup-worktree)
+                    CLEANUP_WORKTREE=true
+                    ;;
                 help)
                     echo "Claude Code Sandbox - Containerized development environment"
                     echo ""
@@ -166,10 +188,25 @@ while getopts "bsndcg-:" opt; do
                     echo "      --rebuild                 Force full rebuild without cache"
                     echo "      --remove                  Remove workspace image and state files"
                     echo "      --cleanup                 Remove old workspace images (default: 7+ days)"
+                    echo "  -W, --cleanup-worktree        Remove worktree after session ends"
+                    echo "  -w, --worktree-branch=BRANCH  Create/use a git worktree for the specified branch"
                     echo "      --sync-config             Sync host configs to sandbox (overwrites sandbox configs)"
+
                     echo "      --older-than=DAYS         Cleanup threshold (e.g. --older-than=3d)"
                     echo "      --dry-run                 Show what would be cleaned without doing it"
                     echo "      --help                    Show this help message"
+                    echo ""
+                    echo "Worktree Support:"
+                    echo "  -w BRANCH, --worktree-branch=BRANCH"
+                    echo "      Creates or uses a git worktree for the specified branch."
+                    echo "      - Auto-generates path: .worktrees/<branch-name> with slashes"
+                    echo "        converted to dashes (e.g., feat/test -> .worktrees/feat-test)."
+                    echo "      - Supports both absolute and relative paths."
+                    echo "      - Falls back to current HEAD if the specified branch doesn't exist."
+                    echo "      - Works with all modes: shell (-s), claude (-c), non-interactive (-n)."
+                    echo ""
+                    echo "  -W, --cleanup-worktree"
+                    echo "      Removes the worktree after the script completes execution."
                     echo ""
                     echo "Tool Installation:"
                     echo "  --install='tool1@version1,tool2@version2'"
@@ -185,6 +222,9 @@ while getopts "bsndcg-:" opt; do
                     echo "  $0 --cleanup                  # Remove images older than 7 days"
                     echo "  $0 --cleanup --older-than=3d  # Remove images older than 3 days"
                     echo "  $0 --cleanup --dry-run        # Preview cleanup without removing"
+                    echo "  $0 -w feat/test -c            # Create worktree for 'feat/test' branch"
+                    echo "  $0 -w ../crm2 -c              # Use existing relative path as worktree"
+                    echo "  $0 -w feat/test -W -c         # Create worktree, cleanup on exit"
                     echo ""
                     echo "Auto-completion:"
                     echo "  Bash: source ./completions/claude-code-sandbox"
@@ -200,6 +240,9 @@ while getopts "bsndcg-:" opt; do
                     echo "  $0 --build --install='python@3.12.8,golang@1.21.5,maven@3.9.6'"
                     echo "  $0 --build --install='java@adoptopenjdk-17.0.2+8,terraform@1.5.7'"
                     echo "  $0 --build --install='nodejs@20.11.0,rust@1.75.0'"
+                    echo "  $0 -w feat/test -c"
+                    echo "  $0 -w ../crm2 -c"
+                    echo "  $0 -w feat/test -W -c"
                     echo "Use --help for more information"
                     exit 1
                     ;;
@@ -607,10 +650,112 @@ setup_glm_config() {
     fi
 }
 
+# Function to resolve and create a git worktree
+resolve_and_create_worktree() {
+    local branch_or_path="$1"
+    local target_path=""
+
+    # Path Resolution Logic: absolute path or relative to parent
+    if [[ "$branch_or_path" == /* ]] || [[ "$branch_or_path" == ../* ]]; then
+        target_path="$branch_or_path"
+    else
+        # Auto-generate path: .worktrees/${branch//\//-}
+        local safe_branch="${branch_or_path//\//-}"
+        target_path=".worktrees/$safe_branch"
+    fi
+
+    # Worktree Creation Logic
+    if [[ -d "$target_path" ]]; then
+        # Validate it's actually a git worktree
+        if ! git worktree list --porcelain | grep -q "^worktree $(cd "$target_path" && pwd)$"; then
+            echo "Error: Directory '$target_path' exists but is not a git worktree" >&2
+            exit 1
+        fi
+        # For auto-generated paths, verify the worktree's branch matches the requested branch
+        if [[ "$branch_or_path" != /* ]] && [[ "$branch_or_path" != ../* ]]; then
+            local actual_branch
+            actual_branch=$(cd "$target_path" && git rev-parse --abbrev-ref HEAD)
+            if [[ "$actual_branch" != "$branch_or_path" ]]; then
+                echo "Error: Directory collision - '$target_path' exists but is on branch '$actual_branch', not '$branch_or_path'" >&2
+                exit 1
+            fi
+        fi
+    else
+        # Check if branch exists in git (local or any remote)
+        if git show-ref --verify --quiet "refs/heads/$branch_or_path" || \
+           git show-ref --quiet "refs/remotes/*/$branch_or_path"; then
+            # If branch exists, add worktree from it
+            if ! git worktree add "$target_path" "$branch_or_path" >&2; then
+                echo "Error: Failed to create worktree at $target_path for branch $branch_or_path" >&2
+                exit 1
+            fi
+        else
+            # Branch doesn't exist - error out
+            echo "Error: Branch '$branch_or_path' not found locally or in origin." >&2
+            echo "Create it first: git branch $branch_or_path" >&2
+            exit 1
+        fi
+    fi
+
+    # Return the absolute path
+    echo "$(cd "$target_path" && pwd)"
+}
+
+cleanup_worktree() {
+    local worktree_path="$1"
+    local original_dir="$2"
+
+    if [[ -z "$worktree_path" ]] || [[ ! -d "$worktree_path" ]]; then
+        echo "No worktree to clean up"
+        return 0
+    fi
+
+    echo "Cleaning up worktree at $worktree_path..."
+
+    # Check for uncommitted changes before cleanup
+    if [[ -n "$(cd "$worktree_path" && git status --porcelain 2>/dev/null)" ]]; then
+        echo "⚠️  Worktree has uncommitted changes - skipping cleanup"
+        echo "   Remove manually: git worktree remove \"$worktree_path\" --force"
+        return 1
+    fi
+
+    # Change back to original directory before removing
+    if [[ -n "$original_dir" ]] && [[ -d "$original_dir" ]]; then
+        cd "$original_dir"
+    fi
+
+    # Remove the worktree (safe - already checked for uncommitted changes)
+    if git worktree remove "$worktree_path" 2>/dev/null; then
+        echo "✅ Worktree removed successfully"
+        return 0
+    else
+        echo "⚠️  Failed to remove worktree (may need manual cleanup)"
+        return 1
+    fi
+}
+
 # Handle sync-config mode
 if [[ "$SYNC_CONFIG" == true ]]; then
     sync_sandbox_config
     exit 0
+fi
+
+# Handle worktree creation and path resolution
+WORKTREE_PATH=""
+ORIGINAL_DIR="$(pwd)"
+if [[ -n "$WORKTREE_BRANCH" ]]; then
+    # Resolve script source to absolute path before changing directory
+    if [[ "$0" == /* ]]; then
+        export SCRIPT_SOURCE="$0"
+    elif [[ "$0" == */* ]]; then
+        export SCRIPT_SOURCE="$(pwd)/$0"
+    else
+        export SCRIPT_SOURCE="$(command -v "$0")"
+    fi
+
+    WORKTREE_PATH=$(resolve_and_create_worktree "$WORKTREE_BRANCH")
+    echo "Using worktree: $WORKTREE_PATH"
+    cd "$WORKTREE_PATH" || exit 1
 fi
 
 # Handle remove mode
@@ -695,7 +840,7 @@ if [[ "$BUILD_IMAGE" == true && -z "$INSTALL_TOOLS" && -f ".tool-versions" ]]; t
 fi
 
 # Get the directory where this script is located (handles symlinks, portable)
-SCRIPT_SOURCE="$0"
+SCRIPT_SOURCE="${SCRIPT_SOURCE:-$0}"
 while [ -L "$SCRIPT_SOURCE" ]; do
     SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
     SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
@@ -934,6 +1079,12 @@ fi
 
 if [ ${#CLAUDE_CONFIG_ARGS[@]} -eq 0 ]; then
     echo "Warning: No configuration directories found"
+fi
+
+# Setup cleanup trap for worktree before running docker (must be before blocking docker run)
+if [[ "$CLEANUP_WORKTREE" == true && -n "$WORKTREE_PATH" ]]; then
+    trap "cleanup_worktree \"$WORKTREE_PATH\" \"$ORIGINAL_DIR\"" EXIT
+    echo "Worktree cleanup will run on exit"
 fi
 
 # Check if we have a TTY or if non-interactive mode is requested
