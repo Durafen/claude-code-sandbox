@@ -397,46 +397,34 @@ fi
 # Sandbox config directory (persistent, protects host files)
 SANDBOX_CONFIG_DIR="$HOME/.claude-sandbox"
 
-# Function to sync credentials from Keychain with caching
-# Only syncs if token is expired or about to expire (5 min buffer)
+# Function to sync credentials from Keychain
+# Compares content with cached file, writes only if different
 sync_credentials() {
-    local force=${1:-false}
-    local buffer_seconds=300  # 5 minute buffer before expiry
-
     # Skip if not on macOS or no security command
     if ! command -v security >/dev/null 2>&1; then
         return 0
     fi
 
     mkdir -p "$SANDBOX_CONFIG_DIR/.claude"
-    local expires_file="$SANDBOX_CONFIG_DIR/.credentials-expires"
     local creds_file="$SANDBOX_CONFIG_DIR/.claude/.credentials.json"
 
-    # Check if we need to sync
-    if [ "$force" = false ] && [ -f "$expires_file" ] && [ -f "$creds_file" ]; then
-        local expires_at=$(cat "$expires_file" 2>/dev/null)
-        local now_ms=$(($(date +%s) * 1000))
-        local buffer_ms=$((buffer_seconds * 1000))
+    # Fetch credentials from Keychain
+    local creds=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+    if [ -z "$creds" ]; then
+        return 0
+    fi
 
-        if [ -n "$expires_at" ] && [ "$now_ms" -lt "$((expires_at - buffer_ms))" ]; then
-            # Token still valid, skip sync
+    # Compare with cached - write only if different
+    if [ -f "$creds_file" ]; then
+        local cached=$(cat "$creds_file" 2>/dev/null)
+        if [ "$creds" = "$cached" ]; then
             return 0
         fi
     fi
 
-    # Fetch fresh credentials from Keychain
-    local creds=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
-    if [ -n "$creds" ]; then
-        echo "$creds" > "$creds_file"
-        chmod 600 "$creds_file"
-
-        # Extract and cache expiresAt
-        local expires_at=$(echo "$creds" | jq -r '.claudeAiOauth.expiresAt // empty' 2>/dev/null)
-        if [ -n "$expires_at" ]; then
-            echo "$expires_at" > "$expires_file"
-        fi
-        echo "Synced credentials from Keychain"
-    fi
+    echo "$creds" > "$creds_file"
+    chmod 600 "$creds_file"
+    echo "Synced credentials from Keychain"
 }
 
 # Function to sync host configs to sandbox (force mode overwrites existing)
@@ -576,7 +564,7 @@ sync_sandbox_config() {
 
     # Sync credentials from Keychain (skip in GLM mode - uses ANTHROPIC_AUTH_TOKEN instead)
     if [[ "$GLM_MODE" != "true" ]]; then
-        sync_credentials true
+        sync_credentials
     fi
 
     # Mark sandbox as initialized
@@ -942,7 +930,7 @@ fi
 if [[ "$GLM_MODE" == "true" ]]; then
     setup_glm_config
 else
-    # Auto-sync credentials on every start (with caching - only syncs if expired)
+    # Auto-sync credentials on every start (writes only if changed)
     sync_credentials
 fi
 
