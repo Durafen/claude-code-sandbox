@@ -47,11 +47,19 @@ generate_venv_setup() {
     cat <<'VENV_EOF'
 if [ ! -d "$CONTAINER_WORKSPACE/.venv-linux" ] && { [ -f "$CONTAINER_WORKSPACE/requirements.txt" ] || [ -f "$CONTAINER_WORKSPACE/pyproject.toml" ]; }; then
     echo 'Creating Python venv (.venv-linux)...'
-    python3 -m venv "$CONTAINER_WORKSPACE/.venv-linux"
-    if [ -f "$CONTAINER_WORKSPACE/requirements.txt" ]; then
-        "$CONTAINER_WORKSPACE/.venv-linux/bin/pip" install -q -r "$CONTAINER_WORKSPACE/requirements.txt"
-    elif [ -f "$CONTAINER_WORKSPACE/pyproject.toml" ]; then
-        "$CONTAINER_WORKSPACE/.venv-linux/bin/pip" install -q -e "$CONTAINER_WORKSPACE"
+    if python3 -m venv "$CONTAINER_WORKSPACE/.venv-linux"; then
+        "$CONTAINER_WORKSPACE/.venv-linux/bin/pip" install -q --upgrade pip 2>/dev/null
+        if [ -f "$CONTAINER_WORKSPACE/requirements.txt" ]; then
+            if ! "$CONTAINER_WORKSPACE/.venv-linux/bin/pip" install -q -r "$CONTAINER_WORKSPACE/requirements.txt"; then
+                echo 'Warning: Some packages failed to install from requirements.txt'
+            fi
+        elif [ -f "$CONTAINER_WORKSPACE/pyproject.toml" ]; then
+            if ! "$CONTAINER_WORKSPACE/.venv-linux/bin/pip" install -q -e "$CONTAINER_WORKSPACE"; then
+                echo 'Warning: Failed to install package from pyproject.toml'
+            fi
+        fi
+    else
+        echo 'Warning: Failed to create Python venv'
     fi
 fi
 if [ -f "$CONTAINER_WORKSPACE/.venv-linux/bin/activate" ]; then
@@ -1141,7 +1149,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             -e CONTAINER_WORKSPACE="$CONTAINER_WORKSPACE" \
             --init \
             "$IMAGE_NAME" \
-            bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; $(generate_venv_setup); exec bash"
+            bash -c "source ~/.asdf/asdf.sh 2>/dev/null || true; $(generate_venv_setup); exec bash --rcfile <(echo 'source ~/.bashrc 2>/dev/null; [ -f \"$CONTAINER_WORKSPACE/.venv-linux/bin/activate\" ] && source \"$CONTAINER_WORKSPACE/.venv-linux/bin/activate\"')"
     elif [ "$NON_INTERACTIVE" = true ]; then
         # Run non-interactive command with asdf support
         docker run -it --rm \
