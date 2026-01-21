@@ -305,195 +305,23 @@ autoload -U compinit && compinit
 ```
 
 
-### .tool-versions File Support
+## Dev Server Port Forwarding
 
-If your workspace contains a `.tool-versions` file ([asdf standard](https://asdf-vm.com/manage/configuration.html#tool-versions)), the system will automatically install all specified tools when you run `--build` without `--install`:
-
-Example `.tool-versions` file:
-```
-python 3.12.8
-nodejs 20.11.0
-java adoptopenjdk-17.0.2+8
-terraform 1.5.7
-```
-
-**Usage Examples:**
-```bash
-# Automatic tool installation from .tool-versions
-claude-code-sandbox --build
-
-# Test installed tools work correctly
-claude-code-sandbox -n "python --version && java -version && terraform --version"
-
-# All tools are automatically available in both interactive and non-interactive modes
-claude-code-sandbox --shell  # Interactive shell with all tools in PATH
-```
-
-This eliminates the need to specify tools manually for projects that already use [asdf](https://asdf-vm.com/).
-
-### Workspace Management
-
-The system provides several commands for managing workspace images and cleaning up disk space:
-
-**Rebuild Options:**
-```bash
-# Standard rebuild (uses Docker cache)
-claude-code-sandbox --build
-
-# Force complete rebuild without cache (useful for troubleshooting)
-claude-code-sandbox --rebuild
-```
-
-**Workspace Cleanup:**
-```bash
-# Remove current workspace image and state files
-claude-code-sandbox --remove
-
-# Clean up old workspace images (7+ days old by default)
-claude-code-sandbox --cleanup
-
-# Clean up images older than specific threshold (in days)
-claude-code-sandbox --cleanup --older-than=3
-
-# Preview what would be cleaned without actually doing it
-claude-code-sandbox --cleanup --dry-run
-```
-
-The cleanup commands help manage disk space by removing workspace images that haven't been used recently. Each workspace maintains its own Docker image, so cleanup is important for long-term disk usage management.
-
-### Git Worktree Support
-
-Work on multiple branches simultaneously using git worktrees:
+Use `-p` or `--ports` to forward dev server ports from container to host:
 
 ```bash
-# Create/use a worktree for a branch (auto-generates ../crm-feat-test if in 'crm' dir)
-./claude-code-sandbox -w feat/test
-
-# Use an existing directory as worktree
-./claude-code-sandbox -w ../my-feature-branch
-
-# Auto-cleanup worktree when session ends
-./claude-code-sandbox -w feat/test -W
-
-# Combine with other flags
-./claude-code-sandbox -w feat/test -s   # Shell mode in worktree
-./claude-code-sandbox -w feat/test -W   # With auto-cleanup
+./claude-code-sandbox -p        # Enable port forwarding
+./claude-code-sandbox -p -s     # Shell mode with ports
 ```
 
-**Flags:**
-- `-w BRANCH` / `--worktree-branch=BRANCH` - Create or use worktree
-- `-W` / `--cleanup-worktree` - Remove worktree when session ends
+| Port | Common Use |
+|------|------------|
+| 3000, 3001 | React, Next.js |
+| 5000, 5001 | Flask, Python |
+| 5173, 5174 | Vite |
+| 8000, 8080 | Django, HTTP |
 
-**How it works:**
-- Auto-generates path in parent directory: `../<current-dir>-<branch>` (e.g., in `crm`: `feat/test` → `../crm-feat-test`)
-- Auto-creates branch from HEAD if it doesn't exist
-- Copies `.env*` and `*.db` files to new worktrees automatically
-- Absolute paths (`/path/to/worktree`) and relative paths (`../sibling`) are used as-is
-
-### Workspace-Specific Images
-
-Each workspace (directory) automatically gets its own Docker image for complete isolation:
-
-```bash
-# First run in a workspace creates a unique image
-claude-code-sandbox --build
-# Created new workspace image: claude-code-sandbox-ax57fqxm
-
-# Subsequent runs use the same workspace-specific image
-claude-code-sandbox
-# Using existing workspace image: claude-code-sandbox-ax57fqxm
-```
-
-**How it works:**
-- A `.claude-code-sandbox` file is created in each workspace with a unique image name
-- This ensures different projects don't share Docker images or interfere with each other
-- Each workspace can have completely different tool configurations
-- You may want to add `.claude-code-sandbox` to your project's `.gitignore` (it's workspace-specific, not meant to be shared)
-
-### Shell Mode & Non-Interactive Testing
-
-**Interactive Shell Mode:**
-
-The `--shell` option launches an interactive bash shell inside the container instead of Claude Code:
-
-```bash
-claude-code-sandbox --shell
-```
-
-This is particularly useful for:
-- **Testing environment issues**: Debug problems with UV, Python, Node.js, or other tools
-- **Exploring the container**: See what tools and configurations are available
-- **Manual operations**: Run commands directly in the sandboxed environment
-- **Troubleshooting**: Investigate PATH issues, missing dependencies, or configuration problems
-
-Once in the shell, you can test tools like:
-```bash
-uv --version          # Test UV installation
-node --version        # Check Node.js
-claude-wrapper --help # Test Claude Code wrapper
-ls -la /home/node     # Check mounted configurations
-```
-
-**Non-Interactive Testing Mode:**
-
-The `--non-interactive` (or `-n`) flag allows you to run commands inside the container without requiring a TTY, perfect for testing and automation:
-
-```bash
-# Test Python installation
-claude-code-sandbox -n "python --version"
-
-# Test uv installation  
-claude-code-sandbox -n "uv --version"
-
-# Test uvx (tool runner)
-claude-code-sandbox -n "uvx cowsay --text 'Hello from uvx!'"
-
-# Test virtual environment workflow
-claude-code-sandbox -n "uv venv myenv && source myenv/bin/activate && uv pip install requests && python -c 'import requests; print(requests.__version__)'"
-
-# Test basic shell commands
-claude-code-sandbox -n "ls -la"
-
-# Test Docker functionality (requires -d flag)
-claude-code-sandbox -n -d "docker --version"
-claude-code-sandbox -n -d "docker ps"
-claude-code-sandbox -n -d "docker run --rm hello-world"
-```
-
-### Configuration
-
-The wrapper automatically detects and mounts the following configuration directories:
-
-- **Claude/Anthropic**: `~/.claude`, `~/.config/claude`, `~/.anthropic`, `~/.claude.json`
-- **Node.js**: `~/.npm`, `~/.pnpm-store`
-- **Python**: `~/.cache` (includes pip cache)
-- **Rust**: `~/.cargo`
-- **Go**: `~/go`
-- **Java**: `~/.gradle`, `~/.m2`
-- **Ruby**: `~/.gem`, `~/.bundle`
-- **Bun**: `~/.bun`
-- **.NET**: `~/.nuget`
-- **AI-CLI**: `~/.ai-cli/config.json`, `.ai-cli.env` (project root)
-- **Beads**: `.beads/` (project task tracking)
-
-### AI-CLI Configuration
-
-The sandbox includes [AI-CLI](https://github.com/Durafen/AI-Cli) for multi-model AI access. To configure API keys:
-
-1. Create a `.ai-cli.env` file in the project root (or copy from your AI-CLI installation):
-   ```bash
-   cp /path/to/ai-cli/.env .ai-cli.env
-   ```
-
-2. The file should contain your API keys:
-   ```env
-   OPENROUTER_API_KEY=sk-or-...
-   ANTHROPIC_API_KEY=sk-ant-...
-   OPENAI_API_KEY=sk-...
-   ```
-
-3. The `.ai-cli.env` file is automatically synced to the sandbox on first run and is already in `.gitignore` to protect your secrets.
-
+**Port conflict?** Free the port: `lsof -i :5000` then `kill -9 <PID>`
 ## Development Environment
 
 The Docker container includes:
@@ -555,8 +383,6 @@ This happens on first run and is cached for subsequent sessions. The `.venv-linu
 - **Docker Access**: Optional Docker-in-Docker via socket mounting with `-d` flag
 
 ## Troubleshooting
-
-### Docker Build Issues
 
 If you encounter build issues:
 
@@ -653,15 +479,30 @@ claude-code-sandbox --remove
 
 ## How It Works
 
-1. **Workspace Image Management**: Each directory gets a unique Docker image name stored in `.claude-code-sandbox`
-2. **Multi-stage Building**: Creates shared base image (`claude-code-sandbox-base`) then workspace-specific layers
-3. **Incremental Builds**: Compares content hashes (Dockerfile + .tool-versions + --install) to determine if rebuild needed
-4. **Dynamic Tools**: If `--install` is specified, [asdf](https://asdf-vm.com/) plugins are installed during build time
-5. **Auto Tool Detection**: [`.tool-versions`](https://asdf-vm.com/manage/configuration.html#tool-versions) files are automatically parsed and installed if present
-6. **Configuration Detection**: Automatically detects and mounts common development configurations
-7. **Workspace Mounting**: Your current working directory is mounted as `/workspace` in the container
-8. **Secure Execution**: Claude Code runs in the sandboxed environment with access to your project files
-9. **Complete Isolation**: Each workspace has its own Docker image preventing tool conflicts between projects
+The sandbox provides a secure and isolated environment for running Claude Code.
+
+### Workspace Image Management
+- Each directory gets a unique Docker image name stored in `.claude-code-sandbox`
+- This ensures different projects don't share Docker images or interfere with each other
+- Each workspace can have completely different tool configurations
+- You may want to add `.claude-code-sandbox` to your project's `.gitignore` (it's workspace-specific, not meant to be shared)
+
+### Incremental Builds & Caching
+- **Shared Base Layers**: Common system packages and Claude Code installation are shared across all workspace images (~500MB shared)
+- **Incremental Builds**: Compares content hashes (Dockerfile + .tool-versions + --install) to determine if rebuild needed
+- **Content Hashing**: Tracks configuration changes to avoid unnecessary rebuilds
+- **Layer Caching**: Docker layer caching minimizes build times for unchanged components
+
+### Python Environment Details
+- **System Python**: Python 3 installed via Debian package manager at `/usr/bin/python3` with symlink at `/usr/local/bin/python`
+- **pip**: System pip3 available via Debian packages
+- **uv**: Modern Python package manager installed per-user in `/home/node/.local/bin/uv`
+- **Flexibility**: Users can use system Python directly or leverage uv for advanced package management
+
+### Container Architecture
+- **User**: Runs as non-root `node` user (UID 1000) for security
+- **Permissions**: Uses gosu for proper privilege dropping
+- **Docker Access**: Optional Docker-in-Docker via socket mounting with `-d` flag
 
 ## Security & Safety
 

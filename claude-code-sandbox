@@ -84,8 +84,9 @@ CLAUDE_MODE=true
 GLM_MODE=false
 WORKTREE_BRANCH=""
 CLEANUP_WORKTREE=false
+PORTS_ENABLED=false
 
-while getopts "bsndcgw:W-:" opt; do
+while getopts "bsndcgpw:W-:" opt; do
     case $opt in
         b)
             BUILD_IMAGE=true
@@ -107,6 +108,9 @@ while getopts "bsndcgw:W-:" opt; do
             GLM_MODE=true
             CLAUDE_MODE=true
             SHELL_MODE=false
+            ;;
+        p)
+            PORTS_ENABLED=true
             ;;
         w)
             WORKTREE_BRANCH="$OPTARG"
@@ -143,6 +147,9 @@ while getopts "bsndcgw:W-:" opt; do
                     GLM_MODE=true
                     CLAUDE_MODE=true
                     SHELL_MODE=false
+                    ;;
+                ports)
+                    PORTS_ENABLED=true
                     ;;
                 cleanup)
                     CLEANUP_MODE=true
@@ -187,6 +194,7 @@ while getopts "bsndcgw:W-:" opt; do
                     echo "  -s, --shell                   Launch interactive shell"
                     echo "  -n, --non-interactive CMD     Run non-interactive command"
                     echo "  -d, --docker                  Enable Docker access inside container"
+                    echo "  -p, --ports                   Forward dev server ports (3000,5000,5173,8000,etc)"
                     echo "      --install=TOOLS           Install tools at build time"
                     echo "      --rebuild                 Force full rebuild without cache"
                     echo "      --remove                  Remove workspace image and state files"
@@ -1080,6 +1088,13 @@ if [ -d "$SANDBOX_CONFIG_DIR/.local/state/opencode" ]; then
     echo "Using sandbox config: .local/state/opencode"
 fi
 
+# --- Dev Server Port Forwarding (opt-in with -p/--ports) ---
+PORT_FLAGS=""
+if [[ "$PORTS_ENABLED" == true ]]; then
+    PORT_FLAGS="-p 3000:3000 -p 3001:3001 -p 5000:5000 -p 5001:5001 -p 5173:5173 -p 5174:5174 -p 8000:8000 -p 8080:8080"
+    echo "Port forwarding enabled: 3000 3001 5000 5001 5173 5174 8000 8080"
+fi
+
 # Check for basic-memory directory (basic-memory MCP server)
 if [ -d "$HOME/basic-memory" ]; then
     CLAUDE_CONFIG_ARGS+=(-v "$HOME/basic-memory:/home/node/basic-memory")
@@ -1145,6 +1160,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             "${GIT_WORKTREE_ARGS[@]}" \
             "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
+            $PORT_FLAGS \
             -e TERM="$TERM" \
             -e CONTAINER_WORKSPACE="$CONTAINER_WORKSPACE" \
             --init \
@@ -1160,6 +1176,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             "${GIT_WORKTREE_ARGS[@]}" \
             "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
+            $PORT_FLAGS \
             -e TERM="$TERM" \
             -e CONTAINER_WORKSPACE="$CONTAINER_WORKSPACE" \
             --init \
@@ -1175,6 +1192,7 @@ if [ -t 0 ] || [ "$NON_INTERACTIVE" = true ]; then
             "${GIT_WORKTREE_ARGS[@]}" \
             "${CLAUDE_CONFIG_ARGS[@]}" \
             $DOCKER_MOUNT \
+            $PORT_FLAGS \
             -e TERM="$TERM" \
             -e CONTAINER_WORKSPACE="$CONTAINER_WORKSPACE" \
             --init \
