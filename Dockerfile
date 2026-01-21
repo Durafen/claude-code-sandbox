@@ -116,6 +116,12 @@ RUN ARCH=$(dpkg --print-architecture) && \
     curl -sL "https://github.com/steveyegge/beads/releases/download/${BD_VERSION}/beads_${BD_VERSION_NUM}_linux_${ARCH}.tar.gz" | tar -xz -C /usr/local/bin bd && \
     ln -sf /usr/local/bin/bd /usr/local/bin/beads
 
+# Install glow (terminal markdown renderer)
+RUN ARCH=$(dpkg --print-architecture) && \
+    case "$ARCH" in amd64) GLOW_ARCH="x86_64" ;; arm64) GLOW_ARCH="arm64" ;; *) GLOW_ARCH="$ARCH" ;; esac && \
+    GLOW_VERSION=$(curl -sL https://api.github.com/repos/charmbracelet/glow/releases/latest | grep tag_name | cut -d'"' -f4) && \
+    curl -sL "https://github.com/charmbracelet/glow/releases/download/${GLOW_VERSION}/glow_${GLOW_VERSION#v}_Linux_${GLOW_ARCH}.tar.gz" | tar -xz --strip-components=1 -C /usr/local/bin --wildcards '*/glow'
+
 # Add node user to docker group for Docker socket access
 RUN addgroup docker || true && adduser node docker
 
